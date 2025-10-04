@@ -1,0 +1,58 @@
+# Owners mapping for PixelProwlers Studio
+# Maps virtual “agents” (RACI roles) to real GitHub owners for routing reviews and assignments.
+# Usage:
+# - Label issues/PRs with agent:<AgentName>, e.g., agent:Diego
+# - A workflow can read this file and auto-assign the mapped GitHub user
+# Current state: all virtual agents map to @gregorycatteau (single human owner)
+
+version: 1
+owners:
+  - agent: Alice
+    github: gregorycatteau
+    role: lead
+    domains: [coordination, docs, ops]
+
+  - agent: Bastien
+    github: gregorycatteau
+    role: security
+    domains: [security, policies, scans]
+
+  - agent: Chloé
+    github: gregorycatteau
+    role: frontend
+    domains: [nuxt, ui, tests]
+
+  - agent: Diego
+    github: gregorycatteau
+    role: backend
+    domains: [django, api, db]
+
+  - agent: Élodie
+    github: gregorycatteau
+    role: ci
+    domains: [workflows, infra]
+
+  - agent: Gaëlle
+    github: gregorycatteau
+    role: qa
+    domains: [tests, coverage]
+
+  - agent: Farid
+    github: gregorycatteau
+    role: knowledge
+    domains: [security_docs, runbooks]
+
+  - agent: Inès
+    github: gregorycatteau
+    role: frontend
+    domains: [headers, a11y]
+
+  - agent: Jules
+    github: gregorycatteau
+    role: analytics
+    domains: [events, privacy]
+
+# Notes:
+# - Replace `github:` values with real GitHub handles as collaborators join.
+# - Optionally move to teams if you migrate to an organization, e.g., github: org/security.
+# - CODEOWNERS has been aligned to @gregorycatteau for all paths until real owners are set.
