@@ -105,6 +105,7 @@ INSTALLED_APPS = [
     "accounts.apps.AccountsConfig",
     "ai_assistants.apps.AiAssistantsConfig",  # ← AJOUT
     "overall_context",  # ← (optionnel) si tu l’emploies
+    "api",
 ]
 
 # Optionally include API app skeleton if present (safe import)
@@ -133,6 +134,17 @@ try:
 except Exception:
     _HAS_RATELIMIT = False
 
+# DRF — OpenAPI schema via drf-spectacular
+REST_FRAMEWORK = {
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
