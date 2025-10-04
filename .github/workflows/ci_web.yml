@@ -165,6 +165,20 @@ jobs:
             mypy --ignore-missing-imports .
           fi
 
+      - name: Security (Bandit) — baseline (non-blocking S1)
+        run: |
+          pipx install bandit >/dev/null 2>&1 || true
+          bandit -q -r . -x "*/migrations/*,*/tests/*" -f json -o /tmp/bandit.json || true
+
+      - name: Upload Bandit report artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: /tmp/bandit.json
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Tests (pytest) with coverage
         run: |
           poetry run coverage run -m pytest -q || poetry run python manage.py test --verbosity 2
