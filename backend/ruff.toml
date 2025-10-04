@@ -1,0 +1,46 @@
+# Ruff configuration for PixelProwlers Studio — Backend
+# Docs: https://docs.astral.sh/ruff/configuration/
+#
+# Baseline:
+# - Aligns with Black line length (100) and Python 3.13 target
+# - Enables a focused ruleset: E,F (pycodestyle/pyflakes), I (isort),
+#   B (bugbear), UP (pyupgrade), SIM (refactors), PL (pylint-like), RUF (ruff)
+# - Ignores E501 (line length) since Black governs formatting
+# - Excludes migrations/tests noise where appropriate
+
+line-length = 100
+target-version = "py313"
+
+extend-exclude = [
+  ".venv",
+  "venv",
+  "node_modules",
+  "**/migrations/**",
+  "dist",
+  "build",
+  ".git",
+  "__pycache__",
+]
+
+[lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "PL", "RUF"]
+ignore = [
+  "E501",  # line length handled by Black
+]
+
+[lint.isort]
+combine-as-imports = true
+force-sort-within-sections = true
+known-first-party = [
+  "accounts",
+  "ai_assistants",
+  "overall_context",
+  "studio_core",
+  "org",
+  "agents",
+]
+
+[lint.per-file-ignores]
+"**/migrations/*.py" = ["ALL"]   # auto-generated; ignore lint
+"**/__init__.py" = ["F401"]      # allow re-exports in package inits
+"**/tests/*.py" = ["E402"]       # allow imports not at top for tests

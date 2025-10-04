@@ -73,3 +73,24 @@ bun run preview
 ```
 
 Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+
+## Tests & Coverage (Vitest)
+
+This project uses Vitest for unit tests. Basic commands:
+```bash
+# run tests once (CI-friendly)
+npm run test -- --run
+
+# run tests in watch mode
+npm run test
+```
+
+Generate a coverage report:
+```bash
+# text summary + lcov (saved under coverage/)
+npm run test -- --coverage --run
+```
+
+Notes:
+- JSDOM is available for component tests. If you start testing Vue components, set the test environment to jsdom (either in a vitest.config.ts or in package.json under "vitest": { "environment": "jsdom" }).
+- CI can publish the lcov report artifact from the coverage/ directory. Keep thresholds informative at first, then tighten as the suite grows.
