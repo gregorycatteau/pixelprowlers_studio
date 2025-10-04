@@ -1,0 +1,29 @@
+# PixelProwlers Studio — pip-audit allowlist (minimal & dated)
+# ------------------------------------------------------------------
+# Purpose
+# - Temporarily ignore specific Python dependency vulnerabilities in CI
+# - Only for HIGH/CRITICAL issues when an immediate fix is not feasible
+# - Every entry MUST be justified and have an expiry date (SLO: 7–14 days)
+#
+# How CI uses this file
+# - The CI pipeline reads this file and passes `--ignore-vuln <ID>` to pip-audit
+# - IDs can be PYSEC-*, GHSA-*, or other pip-audit recognized identifiers
+#
+# Policy & governance
+# - SLO: High/Critical vulnerabilities must be fixed within 7–14 days
+# - Each allowlist entry must include:
+#   1) Vulnerability ID (e.g., PYSEC-2023-XXXX or GHSA-xxxx-xxxx-xxxx)
+#   2) Expiration date (YYYY-MM-DD), kept as close as possible (≤ 14 days)
+#   3) Short justification & planned mitigation/fix
+# - No blanket/wildcard allows. Keep the list minimal. Remove entries once fixed.
+# - Reviewed by Security (Bastien role) before merge.
+#
+# Format (one entry per line)
+#   <VULN_ID>    # expires: YYYY-MM-DD | reason: <short-justification> | fix: <planned-action>
+#
+# Examples (commented; DO NOT UNCOMMENT without review)
+# PYSEC-2023-1234  # expires: 2025-10-18 | reason: vendor patch pending | fix: bump lib_x to >=1.2.3
+# GHSA-aaaa-bbbb-cccc  # expires: 2025-10-12 | reason: breaking change needs refactor | fix: refactor usage + upgrade
+#
+# Current allowlist
+# (empty — no vulnerabilities are ignored at this time)

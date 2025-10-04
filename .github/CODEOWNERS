@@ -3,39 +3,39 @@
 # Remplacez les @handles ci-dessous par les vrais pseudos GitHub de votre équipe.
 
 # Global (fallback)
-*                                      @Alice
+*                                      @gregorycatteau
 
 # Frontend (Nuxt/Tailwind)
-frontend/                              @Chloe @Ines @Alice
-frontend/app/                          @Chloe @Ines
-frontend/app/components/               @Chloe
-frontend/app/pages/                    @Chloe
-frontend/shared/                       @Chloe
-frontend/public/                       @Ines
+frontend/                              @gregorycatteau
+frontend/app/                          @gregorycatteau
+frontend/app/components/               @gregorycatteau
+frontend/app/pages/                    @gregorycatteau
+frontend/shared/                       @gregorycatteau
+frontend/public/                       @gregorycatteau
 
 # Backend (Django/Poetry)
-backend/                               @Diego @Bastien @Alice
-backend/studio_core/settings/          @Diego @Bastien @Elodie
-backend/**/migrations/                 @Diego
-backend/infra/                         @Elodie
+backend/                               @gregorycatteau
+backend/studio_core/settings/          @gregorycatteau
+backend/**/migrations/                 @gregorycatteau
+backend/infra/                         @gregorycatteau
 
 # CI/CD & Infra
-.github/workflows/                     @Elodie @Bastien
-docker/                                @Elodie
+.github/workflows/                     @gregorycatteau
+docker/                                @gregorycatteau
 
 # Sécurité / Policies
-.bandit                                @Bastien
-.bandit.yaml                           @Bastien
-.secrets.baseline                      @Bastien
+.bandit                                @gregorycatteau
+.bandit.yaml                           @gregorycatteau
+.secrets.baseline                      @gregorycatteau
 
 # Docs & décisions
-docs/adr/                              @Diego @Alice @Bastien
-docs/RACI.md                           @Alice
-CONTRIBUTING.md                        @Alice
-README.md                              @Alice
+docs/adr/                              @gregorycatteau
+docs/RACI.md                           @gregorycatteau
+CONTRIBUTING.md                        @gregorycatteau
+README.md                              @gregorycatteau
 
 # QA / Tests
-backend/**/tests*/                     @Gaelle
-backend/**/tests.py                    @Gaelle
-frontend/**/__tests__/**               @Gaelle
-frontend/**/*.{test,spec}.{js,ts,jsx,tsx}  @Gaelle
+backend/**/tests*/                     @gregorycatteau
+backend/**/tests.py                    @gregorycatteau
+frontend/**/__tests__/**               @gregorycatteau
+frontend/**/*.{test,spec}.{js,ts,jsx,tsx}  @gregorycatteau

@@ -12,6 +12,19 @@ export default defineNuxtConfig({
   vite: {
     plugins: [tailwindcss()],
   },
+  nitro: {
+    routeRules: {
+      '/**': {
+        headers: {
+          'X-Frame-Options': 'DENY',
+          'X-Content-Type-Options': 'nosniff',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+          'Content-Security-Policy-Report-Only':
+            "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https://api.staging.pixelprowlers.io; base-uri 'self'; frame-ancestors 'none'; report-uri /api/csp-report",
+        },
+      },
+    },
+  },
   runtimeConfig: {
     // Privé (côté serveur uniquement)
     DJANGO_BASE_URL: process.env.NUXT_DJANGO_BASE_URL || 'http://localhost:8000',

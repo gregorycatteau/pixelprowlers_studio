@@ -338,7 +338,7 @@ def api_list_agents(request: HttpRequest) -> JsonResponse:
     """
     qs = AgentProfile.objects.filter(is_enabled=True).order_by("name")
     agents = [_agent_summary(a) for a in qs]
-    return JsonResponse(agents, status=200, safe=False)
+    return JsonResponse({"agents": agents}, status=200)
 
 
 @require_POST
