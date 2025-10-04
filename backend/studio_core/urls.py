@@ -10,6 +10,9 @@ from django.http import HttpResponseNotFound
 from django.urls import include, path, re_path
 from django.views.generic import RedirectView
 
+# OpenAPI schema views (drf-spectacular)
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+
 # JWT (DRF SimpleJWT) — compat héritée
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 
@@ -55,6 +58,16 @@ urlpatterns = [
     # =========================
     path("api/ping/", views.api_ping, name="api_ping"),
     # =========================
+    # OpenAPI schema & docs (drf-spectacular)
+    # =========================
+    path("api/schema/", SpectacularAPIView.as_view(), name="api_schema"),
+    path(
+        "api/docs/swagger/",
+        SpectacularSwaggerView.as_view(url_name="api_schema"),
+        name="api_swagger_ui",
+    ),
+    path("api/docs/redoc/", SpectacularRedocView.as_view(url_name="api_schema"), name="api_redoc"),
+    # =========================
     # GraphQL (vue sécurisée)
     # =========================
     path("graphql", secure_graphql_view, name="graphql_no_slash"),
@@ -72,6 +85,7 @@ urlpatterns = [
     # =========================
     # API Agents (consommée par Nuxt)
     # =========================
+    path("api/", include("api.views")),
     path("api/", include("ai_assistants.urls")),
 ]
 

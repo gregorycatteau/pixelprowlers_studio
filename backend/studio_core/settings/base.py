@@ -96,6 +96,7 @@ INSTALLED_APPS = [
     "django.contrib.postgres",  # champs ArrayField, etc.
     # API
     "rest_framework",
+    "drf_spectacular",
     "rest_framework_simplejwt.token_blacklist",
     # GraphQL
     "strawberry.django",
@@ -105,6 +106,14 @@ INSTALLED_APPS = [
     "ai_assistants.apps.AiAssistantsConfig",  # ← AJOUT
     "overall_context",  # ← (optionnel) si tu l’emploies
 ]
+
+# Optionally include API app skeleton if present (safe import)
+try:
+    import api  # type: ignore  # noqa: F401
+
+    INSTALLED_APPS.append("api")
+except Exception:
+    pass
 
 # CORS (si présent)
 try:
@@ -209,6 +218,7 @@ REST_FRAMEWORK = {
         "jwt_refresh": os.getenv("DRF_THROTTLE_JWT_REFRESH", "30/min"),
         "jwt_verify": os.getenv("DRF_THROTTLE_JWT_VERIFY", "60/min"),
     },
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 # --- SimpleJWT (RS256 si clés fournies, sinon fallback HS256) ---
