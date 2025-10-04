@@ -78,8 +78,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Security (npm audit) — non blocking
-        run: npm audit || true
+      - name: Security (npm audit) — block High/Critical
+        run: npm audit --audit-level=high
 
   api:
     name: API (Django / Poetry / Postgres)
@@ -137,6 +137,14 @@ jobs:
 
       - name: Migrations (check dry-run)
         run: poetry run python manage.py makemigrations --check --dry-run
+
+      - name: Lint (ruff)
+        run: |
+          pipx install ruff
+          ruff check .
+
+      - name: Format check (ruff)
+        run: ruff format --check .
 
       - name: Lint (ruff)
         run: |
