@@ -17,7 +17,7 @@ jobs:
   web:
     name: Web (Nuxt 4 / Tailwind 4)
     runs-on: ubuntu-latest
-    continue-on-error: true
+
     defaults:
       run:
         working-directory: frontend
