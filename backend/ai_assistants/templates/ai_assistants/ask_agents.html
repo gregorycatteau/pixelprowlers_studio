@@ -1,0 +1,224 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content %}
+<style>
+  /* Palette et base */
+  :root {
+    --background-dark: #0d0d0d;
+    --background-card: #141414;
+    --border-neon: #00ffcc;
+    --text-primary: #e0ffe7;
+    --text-secondary: #7dd3fc;
+    --text-alert: #ff4c4c;
+    --accent-purple: #8b5cf6;
+    --accent-green: #10b981;
+    --accent-blue: #2563eb;
+    --font-family: 'Fira Code', monospace;
+  }
+
+  body {
+    background-color: var(--background-dark);
+    font-family: var(--font-family);
+    color: var(--text-primary);
+  }
+
+  .cockpit-container {
+    padding: 2rem;
+    max-width: 1200px;
+    margin: auto;
+  }
+
+  .dashboard-title {
+    font-size: 2rem;
+    font-weight: bold;
+    color: var(--accent-green);
+    margin-bottom: 1.5rem;
+    border-left: 6px solid var(--border-neon);
+    padding-left: 1rem;
+  }
+
+  .manifesto-panel {
+    background: #111;
+    border: 1px solid var(--accent-green);
+    padding: 1rem;
+    border-radius: 6px;
+    margin-bottom: 1.5rem;
+    white-space: pre-wrap;
+    display: none;
+  }
+
+  .manifesto-toggle {
+    color: var(--accent-blue);
+    cursor: pointer;
+    margin-bottom: 1rem;
+    display: inline-block;
+  }
+
+  .agent-selection {
+    margin-bottom: 2rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  select {
+    background: #000;
+    color: var(--accent-green);
+    border: 1px solid var(--accent-green);
+    padding: 0.5rem;
+    border-radius: 4px;
+    font-family: var(--font-family);
+  }
+
+  .agent-profile {
+    background-color: var(--background-card);
+    border: 2px solid var(--border-neon);
+    border-radius: 10px;
+    padding: 1.2rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 0 12px var(--border-neon);
+  }
+
+  .agent-profile h3 {
+    color: var(--accent-blue);
+    margin-bottom: 0.5rem;
+  }
+
+  .chat-box {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--background-card);
+    border: 2px solid var(--accent-purple);
+    border-radius: 10px;
+    padding: 1.2rem;
+    box-shadow: 0 0 12px var(--accent-purple);
+  }
+
+  .chat-output {
+    background: #111;
+    border: 1px solid #444;
+    padding: 1rem;
+    min-height: 120px;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+    white-space: pre-wrap;
+    color: var(--text-secondary);
+    overflow-x: auto;
+  }
+
+  .chat-input {
+    display: flex;
+    gap: 1rem;
+  }
+
+  .chat-input input {
+    flex: 1;
+    padding: 0.75rem;
+    background-color: #1f1f1f;
+    border: 1px solid var(--border-neon);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-family: var(--font-family);
+  }
+
+  .chat-input button {
+    background-color: var(--accent-purple);
+    color: white;
+    border: none;
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .chat-input button:hover {
+    background-color: #6d28d9;
+  }
+
+  .history-log {
+    margin-top: 2rem;
+    font-size: 0.9rem;
+    border-left: 3px solid var(--accent-green);
+    padding-left: 1rem;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .history-log p {
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary);
+  }
+</style>
+
+<div class="cockpit-container">
+  <div class="dashboard-title">🧠 Console d'interrogation IA</div>
+
+  <div class="manifesto-toggle" onclick="document.getElementById('manifesto-panel').style.display = (document.getElementById('manifesto-panel').style.display === 'none') ? 'block' : 'none';">
+    📜 Afficher / masquer le manifeste global
+  </div>
+  <div class="manifesto-panel" id="manifesto-panel">
+    {% if manifesto %}
+      {{ manifesto.content }}
+    {% else %}
+      Aucun manifeste actif.
+    {% endif %}
+  </div>
+
+  <form method="POST">
+    {% csrf_token %}
+    <div class="agent-selection">
+      <label for="agent"><strong>🎛️ Choisir un agent :</strong></label>
+      <select name="agent" id="agent" onchange="this.form.submit()">
+        {% for agent in agents %}
+          <option value="{{ agent.name }}" {% if agent.name == selected_agent %}selected{% endif %}>
+            {{ agent.name|title }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+
+  {% if selected_agent %}
+    {% for agent in agents %}
+      {% if agent.name == selected_agent %}
+        <div class="agent-profile">
+          <h3>{{ agent.name|title }}</h3>
+          <p><strong>Modèle :</strong> {{ agent.model }}</p>
+          <p><strong>Température :</strong> {{ agent.temperature }}</p>
+          <p><strong>Description :</strong> {{ agent.description }}</p>
+          <p><strong>Style de communication :</strong> {{ agent.communication_style|default:"Standard" }}</p>
+        </div>
+      {% endif %}
+    {% endfor %}
+
+    <form method="POST" class="chat-box">
+      {% csrf_token %}
+      <input type="hidden" name="agent" value="{{ selected_agent }}">
+
+      <div class="chat-output">
+        {% if response %}
+          {{ response|safe }}
+        {% else %}
+          L’agent {{ selected_agent|title }} est prêt à recevoir vos instructions.
+        {% endif %}
+      </div>
+
+      <div class="chat-input">
+        <input type="text" name="message" placeholder="Tape ton message à {{ selected_agent|title }}..." required>
+        <button type="submit">Envoyer</button>
+      </div>
+    </form>
+
+    <div class="history-log">
+      <strong>🕘 Derniers échanges :</strong>
+      {% for log in past_logs %}
+        <p>🗨️ <em>{{ log.timestamp|date:"Y-m-d H:i" }}</em> → {{ log.message|truncatechars:80 }}</p>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+
+<script>
+  // Futurs easter eggs / surcharges ici (facultatif)
+</script>
+{% endblock %}

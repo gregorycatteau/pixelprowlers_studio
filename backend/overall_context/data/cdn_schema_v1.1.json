@@ -1,0 +1,99 @@
+{
+  "schema_version": "1.1.0",
+  "description": "Modèle canonique de bloc de zone logique pour le CDN PixelProwlers. Version 1.1 : gestion d’accès granulaire, politiques de rétention dynamiques, tags opérationnels, et métriques post-incident.",
+  "structure": {
+    "id": "Zx",
+    "code": "TAXON_PLACEHOLDER",
+    "label": "Nom lisible de la zone",
+    "description": "Définition fonctionnelle et métier de cette zone dans le plan global.",
+    "intent_scope": [
+      "objectif principal de la zone",
+      "types d'informations attendues",
+      "valeurs de contexte associées"
+    ],
+    "access_policy": {
+      "default_sensitivity": "internal",
+      "visibility_levels": [
+        "public",
+        "clients",
+        "project_member",
+        "external_admin",
+        "internal_admin",
+        "ngner_only",
+        "striker_only",
+        "redteam_only",
+        "hidden"
+      ],
+      "auth_required": true,
+      "queryable_by_default": false,
+      "project_specific_overrides": true
+    },
+    "structure_schema": {
+      "has_subzones": true,
+      "subzone_prefix": "Zx.y",
+      "recommended_subzones": [
+        {
+          "id": "Zx.1",
+          "label": "Nom de sous-zone 1",
+          "description": "Objectif de la sous-zone",
+          "preferred_formats": ["json", "md", "pdf"],
+          "priority_hint": 0.9
+        }
+      ]
+    },
+    "recommended_tags": [
+      "critical_context",
+      "design_system",
+      "policy_reference",
+      "client_scope",
+      "pentest_sensitive",
+      "fallback_content",
+      "legal_constraints",
+      "a11y_audit",
+      "interface_contract",
+      "agent_instruction",
+      "code_base_map",
+      "anomaly_trigger"
+    ],
+    "versioning_policy": {
+      "strategy": "immutable",
+      "require_changelog": true,
+      "retention_policy": "contextual",
+      "retention_rules": {
+        "prod_feature": "infinite",
+        "internal_doc": "6_months",
+        "sensitive_logs": "30_days",
+        "pentest_files": "suppress_retention"
+      }
+    },
+    "security_controls": {
+      "encrypt_by_default": true,
+      "cloud_storage_allowed": false,
+      "context_injection_allowed": false,
+      "access_logs_required": true,
+      "sensitive_keywords_trigger": ["exploit", "token", "pwd", "ssh_key"],
+      "tamperproof_required": true
+    },
+    "metrics_template": {
+      "track_usage": true,
+      "track_last_accessed": true,
+      "track_modifications": true,
+      "log_extraction_attempts": true,
+      "alert_on_unauthorized_access": true,
+      "anomaly_score": {
+        "enabled": true,
+        "weighting": {
+          "access_frequency": 0.2,
+          "deviation_from_role": 0.4,
+          "context_leak_risk": 0.4
+        }
+      },
+      "forensic_hooks": {
+        "on_delete": "dump_to_vault",
+        "on_access_by_redflagged_role": "mirror_to_monitoring",
+        "on_contextual_conflict": "trigger_alert_chain"
+      }
+    },
+    "notes": "Modèle taxonomique avancé. Chaque champ est pensé pour modéliser un entrepôt souverain dans un contexte VUCA avec risques critiques."
+  }
+}

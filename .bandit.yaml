@@ -1,0 +1,8 @@
+# Bandit config (YAML)
+exclude_dirs:
+  - backend/**/migrations
+  - backend/**/tests
+skips:
+  - B101   # 'assert' in tests par ex.
+targets:
+  - backend

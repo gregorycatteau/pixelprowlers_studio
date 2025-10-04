@@ -1,0 +1,17 @@
+agents_registry.json
+bruce_agent.json
+claire_agent.json
+dan_agent.json
+eva_agent.json
+heider_agent.json
+jared_agent.json
+jonas_agent.json
+julien_agent.json
+marty_agent.json
+nova_agent.json
+rand_agent.json
+sarah_agent.json
+shafi_agent.json
+shay_agent.json
+talia_agent.json
+tom_agent.json

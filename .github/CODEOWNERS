@@ -1,0 +1,41 @@
+# CODEOWNERS — PixelProwlers Studio
+# Syntaxe: https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+# Remplacez les @handles ci-dessous par les vrais pseudos GitHub de votre équipe.
+
+# Global (fallback)
+*                                      @Alice
+
+# Frontend (Nuxt/Tailwind)
+frontend/                              @Chloe @Ines @Alice
+frontend/app/                          @Chloe @Ines
+frontend/app/components/               @Chloe
+frontend/app/pages/                    @Chloe
+frontend/shared/                       @Chloe
+frontend/public/                       @Ines
+
+# Backend (Django/Poetry)
+backend/                               @Diego @Bastien @Alice
+backend/studio_core/settings/          @Diego @Bastien @Elodie
+backend/**/migrations/                 @Diego
+backend/infra/                         @Elodie
+
+# CI/CD & Infra
+.github/workflows/                     @Elodie @Bastien
+docker/                                @Elodie
+
+# Sécurité / Policies
+.bandit                                @Bastien
+.bandit.yaml                           @Bastien
+.secrets.baseline                      @Bastien
+
+# Docs & décisions
+docs/adr/                              @Diego @Alice @Bastien
+docs/RACI.md                           @Alice
+CONTRIBUTING.md                        @Alice
+README.md                              @Alice
+
+# QA / Tests
+backend/**/tests*/                     @Gaelle
+backend/**/tests.py                    @Gaelle
+frontend/**/__tests__/**               @Gaelle
+frontend/**/*.{test,spec}.{js,ts,jsx,tsx}  @Gaelle

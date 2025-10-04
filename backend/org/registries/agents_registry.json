@@ -1,0 +1,41 @@
+{
+  "registry_version": "1.0.1",
+  "generated_at": "2025-08-19T14:30:00+02:00",
+  "entries": [
+    { "id": "Jared", "name": "Jared", "squad": "Portfolio & Stratégie", "role": "coordination", "status": "active" },
+    { "id": "Marty", "name": "Marty", "squad": "Portfolio & Stratégie", "role": "product", "status": "active" },
+
+    { "id": "Dan", "name": "Dan", "squad": "Build Studio", "role": "ux_front_nuxt", "status": "active" },
+    { "id": "Tom", "name": "Tom", "squad": "Build Studio", "role": "backend_django", "status": "active" },
+    { "id": "Luke", "name": "Luke", "squad": "Build Studio", "role": "cro_ux_copy", "status": "active" },
+    { "id": "Yoav", "name": "Yoav", "squad": "Build Studio", "role": "web_perf", "status": "active" },
+    { "id": "Addy", "name": "Addy", "squad": "Build Studio", "role": "web_perf", "status": "active" },
+
+    { "id": "Bruce", "name": "Bruce", "squad": "DB & Crypto Services", "role": "dbsec_crypto", "status": "active" },
+
+    { "id": "Eva", "name": "Eva", "squad": "Blue Team", "role": "security_lead", "status": "active" },
+    { "id": "Adam", "name": "Adam", "squad": "Blue Team", "role": "auth_fido2_sso", "status": "active" },
+    { "id": "Scott", "name": "Scott", "squad": "Blue Team", "role": "headers_csp", "status": "active" },
+    { "id": "Troy", "name": "Troy", "squad": "Blue Team", "role": "exposure_breach_checks", "status": "active" },
+
+    { "id": "Kevin", "name": "Kevin", "squad": "Red Team – Offensive", "role": "offensive_ops", "status": "active" },
+    { "id": "Lance", "name": "Lance", "squad": "Deception Engineering & Counter-Intel", "role": "deception_ops", "status": "active" },
+
+    { "id": "Charity", "name": "Charity", "squad": "SRE & Platform", "role": "sre_observability", "status": "active" },
+    { "id": "Jez", "name": "Jez", "squad": "Collab Core Ops", "role": "integrity_backups", "status": "active" },
+
+    { "id": "Claire", "name": "Claire", "squad": "Comms Factory", "role": "email_strategy", "status": "active" },
+    { "id": "Al", "name": "Al", "squad": "Comms Factory", "role": "deliverability", "status": "active" },
+    { "id": "Rand", "name": "Rand", "squad": "Prospect Intelligence", "role": "seo_semantics", "status": "active" },
+
+    { "id": "Max", "name": "Max", "squad": "Gouvernance & Conformité", "role": "privacy_rgpd", "status": "active" },
+    { "id": "Marcy", "name": "Marcy", "squad": "i18n & A11y Ops", "role": "a11y", "status": "active" },
+
+    { "id": "Chip", "name": "Chip", "squad": "Model Governance & Cost Gate", "role": "budget_gatekeeper", "status": "active" },
+    { "id": "Frederic", "name": "Frederic", "squad": "FinOps/LLMOps & GreenOps", "role": "green_it", "status": "active" },
+
+    { "id": "Sebastien", "name": "Sebastien", "squad": "Intel/Scraping – Best Practices", "role": "nuxt_best_practices", "status": "active" },
+    { "id": "Jacob", "name": "Jacob", "squad": "Intel/Scraping – Best Practices", "role": "django_best_practices", "status": "active" },
+    { "id": "Ilya", "name": "Ilya", "squad": "Intel/Scraping – Best Practices", "role": "web_perf_research", "status": "active" }
+  ]
+}

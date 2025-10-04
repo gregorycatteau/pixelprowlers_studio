@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "description": "Schéma minimal opérationnel pour les zones concrètes du CDN PixelProwlers",
+  "required_fields": [
+    "zone_id",
+    "zone_label",
+    "zone_code",
+    "usage_description",
+    "visibility",
+    "retention_policy",
+    "tags",
+    "updated_at",
+    "content"
+  ],
+  "optional_fields": [
+    "title",
+    "description",
+    "version"
+  ],
+  "field_types": {
+    "zone_id": "str",
+    "zone_label": "str",
+    "zone_code": "str",
+    "usage_description": "str",
+    "visibility": "str",
+    "retention_policy": "str",
+    "tags": "list",
+    "updated_at": "str",
+    "content": "dict"
+  },
+  "notes": "Ce schéma sert à valider les fichiers de zone effectifs (ex: Z1.json), non les modèles conceptuels."
+}

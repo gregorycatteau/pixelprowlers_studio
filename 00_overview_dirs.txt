@@ -1,0 +1,20 @@
+.
+├── backend
+│   ├── accounts
+│   ├── agents
+│   ├── ai_assistants
+│   ├── cdn_zones
+│   ├── infra
+│   ├── org
+│   ├── overall_context
+│   └── studio_core
+├── cdn
+├── config
+├── docker
+└── frontend
+    ├── app
+    ├── public
+    ├── server
+    └── shared
+
+18 directories

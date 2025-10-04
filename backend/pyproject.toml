@@ -1,0 +1,60 @@
+[tool.poetry]
+name = "pixelprowlers-backend"
+version = "0.1.0"
+description = "Backend Django pour PixelProwlers géré avec Poetry (envs dev/test/upgrade/prod)."
+authors = ["Greg Catteau <contact@pixelprowlers.io>"]
+readme = "README.md"
+packages = [{ include = "studio_core" }]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.13"
+Django = "^5.2"
+psycopg = {version = "^3", extras = ["binary"]}
+dj-database-url = "^2"
+django-environ = "^0.11.2"
+# djangorestframework = "^3.15.2"          # décommente quand tu l’actives
+# django-cors-headers = "^4.4.0"            # idem
+djangorestframework = "^3.15"
+django-cors-headers = "^4.4"
+strawberry-graphql = "^0.278.1"
+strawberry-graphql-django = "^0.65.1"
+django-ratelimit = "^4"
+djangorestframework-simplejwt = "^5.5.1"
+jsonschema = "^4"
+celery = "^5"
+redis = "^5"
+
+[tool.poetry.group.dev.dependencies]
+django-debug-toolbar = "^4.4.6"
+ipython = "^8.27.0"
+rich = "^13.8.1"
+poethepoet = "^0.28.0"
+
+[tool.poetry.group.test.dependencies]
+pytest = "^8.3.2"
+pytest-django = "^4.9.0"
+factory-boy = "^3.3.0"
+freezegun = "^1.5.1"
+coverage = "^7.6.1"
+
+[tool.poetry.group.upgrade.dependencies]
+django-axes = "^6.5.0"
+
+[tool.poetry.group.prod.dependencies]
+gunicorn = "^22.0.0"
+whitenoise = "^6.7.0"
+
+# ─────────────────────────────────────────────
+# Tâches DX (poethepoet) — alias pratiques
+# ─────────────────────────────────────────────
+[tool.poe.tasks]
+run          = "python manage.py runserver"
+shell        = "python manage.py shell"
+migrate      = "python manage.py migrate"
+makemigrations = "python manage.py makemigrations"
+check        = "python manage.py check --deploy"
+collectstatic = "python manage.py collectstatic --noinput"
+superuser    = "python manage.py createsuperuser"
+tests        = "pytest -q"
+cov          = "coverage run -m pytest && coverage report -m"

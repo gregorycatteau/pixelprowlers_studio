@@ -1,0 +1,5 @@
+# .bandit
+[bandit]
+targets: backend
+exclude: backend/**/migrations,backend/**/tests
+skips: B101

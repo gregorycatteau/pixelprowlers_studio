@@ -1,0 +1,167 @@
+name: CI — Web/API/Security (gated)
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Web (Nuxt 4 / Tailwind 4)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Lint (ESLint)
+        run: npm run -s lint
+
+      - name: Lint (Stylelint)
+        run: npm run -s stylelint
+
+      - name: Typecheck (vue-tsc)
+        run: npm run -s typecheck
+
+      - name: Unit tests (Vitest if configured)
+        run: |
+          if grep -E '"test"\s*:' package.json >/dev/null; then
+            npm run -s test -- --run
+          else
+            echo "No frontend test script configured; skipping"
+          fi
+
+      - name: Build
+        run: npm run -s build
+
+      - name: Security (npm audit) — non blocking
+        run: npm audit || true
+
+  api:
+    name: API (Django / Poetry / Postgres)
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: app
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres -d app"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/app
+      DJANGO_SETTINGS_MODULE: studio_core.settings.test
+    defaults:
+      run:
+        working-directory: backend
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Cache Poetry and pip
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pypoetry
+            ~/.cache/pip
+          key: ${{ runner.os }}-poetry-${{ hashFiles('backend/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+
+      - name: Install backend dependencies
+        run: poetry install --no-interaction --no-ansi
+
+      - name: Migrations (check dry-run)
+        run: poetry run python manage.py makemigrations --check --dry-run
+
+      - name: Lint (ruff)
+        run: |
+          pipx install ruff
+          ruff check .
+
+      - name: Format check (ruff)
+        run: ruff format --check .
+
+      - name: Typecheck (mypy — baseline strict)
+        run: |
+          pipx install mypy
+          if [ -f mypy.ini ]; then
+            mypy --config-file mypy.ini .
+          elif [ -f backend/mypy.ini ]; then
+            mypy --config-file backend/mypy.ini backend
+          else
+            mypy --ignore-missing-imports .
+          fi
+
+      - name: Tests (Django)
+        run: poetry run python manage.py test --verbosity 2
+
+  security:
+    name: Security (deps & secrets)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python deps — pip-audit (export Poetry) — non blocking
+        working-directory: backend
+        run: |
+          pipx install poetry pip-audit
+          poetry export -f requirements.txt --without-hashes -o /tmp/req.txt
+          pip-audit -r /tmp/req.txt || true
+
+      - name: Node deps — npm audit (frontend) — non blocking
+        working-directory: frontend
+        run: npm audit || true
+
+      - name: Heuristic secret scan — non blocking
+        shell: bash
+        run: |
+          git ls-files | xargs -I{} sh -c "grep -nE '(AKIA[0-9A-Z]{16}|SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE KEY|BEGIN RSA PRIVATE KEY)' -H {} || true"
+
+  gitleaks:
+    name: Gitleaks (non blocking)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks (non blocking)
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          args: detect --no-banner --redact --exit-code 0

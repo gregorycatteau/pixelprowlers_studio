@@ -1,0 +1,22 @@
+{
+  "schema_name": "ZoneBlock",
+  "description": "Historique structuré des évolutions du modèle taxonomique des blocs de zone pour le CDN PixelProwlers. Ce fichier constitue la source de vérité de toutes les versions applicables au cdn_schema.",
+  "changelog": [
+    {
+      "version": "1.0.0",
+      "date": "2025-08-01",
+      "type": "initial_release",
+      "author": "PixelProwlers Core",
+      "changes": [
+        "Définition du modèle de base ZoneBlock",
+        "Ajout des champs de structure logique : id, code, label, intent_scope",
+        "Ajout de la politique d’accès (access_policy) avec sensibilité, visibilité, auth",
+        "Ajout de la structure interne (subzones, formats, priorité)",
+        "Ajout de la politique de versionnement (immutable, changelog)",
+        "Ajout des contrôles de sécurité de base (encryption, logs)",
+        "Ajout du bloc metrics_template (usage, modification, accès)"
+      ],
+      "notes": "Ce modèle pose les fondations du routage taxonomique et du versioning structuré des blocs de contexte du CDN. Il est compatible avec tous les types de contenus, toutes audiences, et s'applique à l'ensemble des zones de contexte (Z1 à Z10)."
+    }
+  ]
+}

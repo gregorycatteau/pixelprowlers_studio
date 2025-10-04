@@ -1,0 +1,151 @@
+backend
+├── accounts
+│   ├── admin.py
+│   ├── apps.py
+│   ├── auth.py
+│   ├── __init__.py
+│   ├── management
+│   │   └── commands
+│   │       └── bootstrap_owners.py
+│   ├── middleware.py
+│   ├── models.py
+│   ├── permissions.py
+│   ├── tests.py
+│   ├── urls.py
+│   └── views.py
+├── agents
+│   ├── agents_registry.json
+│   ├── bruce_agent.json
+│   ├── claire_agent.json
+│   ├── dan_agent.json
+│   ├── eva_agent.json
+│   ├── generate_agents_registry.py
+│   ├── heider_agent.json
+│   ├── jared_agent.json
+│   ├── jonas_agent.json
+│   ├── julien_agent.json
+│   ├── marty_agent.json
+│   ├── nova_agent.json
+│   ├── rand_agent.json
+│   ├── register_agent.py
+│   ├── requirements.txt
+│   ├── sarah_agent.json
+│   ├── shafi_agent.json
+│   ├── shay_agent.json
+│   ├── talia_agent.json
+│   └── tom_agent.json
+├── ai_assistants
+│   ├── admin.py
+│   ├── apps.py
+│   ├── file_reader.py
+│   ├── fixtures
+│   │   ├── agents_json
+│   │   ├── import_agents_from_json.py
+│   │   └── __init__.py
+│   ├── __init__.py
+│   ├── management
+│   │   └── commands
+│   │       └── import_agents.py
+│   ├── models.py
+│   ├── signals.py
+│   ├── templates
+│   │   └── ai_assistants
+│   │       └── ask_agents.html
+│   ├── tests.py
+│   ├── urls.py
+│   ├── utils
+│   │   ├── agent_schema.py
+│   │   ├── context_cache.py
+│   │   ├── db_loader.py
+│   │   ├── impact_analyzer.py
+│   │   ├── __init__.py
+│   │   └── team_client.py
+│   ├── utils.py
+│   └── views.py
+├── backend_tree.txt
+├── cdn_zones
+│   ├── .gitkeep
+│   └── Z1.json
+├── db.sqlite3
+├── .env.dev
+├── .env.dev.bak
+├── .env.prod
+├── .env.prod.local
+├── .env.test
+├── .env.upgrade
+├── infra
+│   └── pg_setup_17.sh
+├── manage.py
+├── org
+│   └── registries
+│       ├── agents_registry.json
+│       └── squads_registry.json
+├── overall_context
+│   ├── admin.py
+│   ├── apps.py
+│   ├── backup
+│   │   ├── backup_encryptor.py
+│   │   ├── backup_event_logger.py
+│   │   ├── restore_decryptor.py
+│   │   ├── rotate_backups.py
+│   │   ├── rotation_manager.py
+│   │   └── tasks.py
+│   ├── cdn_specs.md
+│   ├── cdn_zones
+│   │   └── cdn_schema_operational_v1.1.json
+│   ├── data
+│   │   ├── cdn_policy.json
+│   │   ├── cdn_registry.json
+│   │   ├── cdn_schema_changelog.json
+│   │   ├── cdn_schema_operational_v1.json
+│   │   ├── cdn_schema_v1.1.json
+│   │   └── cdn_schema_v1.2.json
+│   ├── __init__.py
+│   ├── models.py
+│   ├── readme.md
+│   ├── tests.py
+│   ├── utils
+│   │   ├── cdn_schema_migrator.py
+│   │   └── context_loader.py
+│   ├── validators
+│   │   ├── __init__.py
+│   │   ├── post_restore_validator.py
+│   │   ├── test_cdn_integrity.py
+│   │   └── validate_zone.py
+│   ├── vectorizer
+│   │   ├── engines
+│   │   │   ├── engine_selector.py
+│   │   │   ├── __init__.py
+│   │   │   └── local_embedder.py
+│   │   ├── extract_chunks.py
+│   │   ├── __init__.py
+│   │   ├── logger.py
+│   │   ├── tasks.py
+│   │   └── vectorize_chunks.py
+│   └── views.py
+├── poetry.lock
+├── pyproject.toml
+└── studio_core
+    ├── asgi.py
+    ├── auth_views.py
+    ├── celery.py
+    ├── graphql_rules.py
+    ├── graphql_security.py
+    ├── honeypot.py
+    ├── __init__.py
+    ├── jwt_serializers.py
+    ├── permissions.py
+    ├── schema.py
+    ├── settings
+    │   ├── base.py
+    │   ├── dev.py
+    │   ├── __init__.py
+    │   ├── prod.py
+    │   ├── security.py
+    │   ├── test.py
+    │   └── upgrade.py
+    ├── urls.py
+    ├── views.py
+    └── wsgi.py
+
+27 directories, 122 files

@@ -1,0 +1,112 @@
+.
+├── backend
+│   ├── accounts
+│   ├── agents
+│   ├── ai_assistants
+│   ├── cdn_zones
+│   ├── infra
+│   ├── org
+│   ├── overall_context
+│   └── studio_core
+├── cdn
+├── config
+├── docker
+└── frontend
+    ├── app
+    ├── public
+    ├── server
+    └── shared
+
+18 directories
+backend
+├── accounts
+│   └── management
+│       └── commands
+├── agents
+├── ai_assistants
+│   ├── fixtures
+│   │   └── agents_json
+│   ├── management
+│   │   └── commands
+│   ├── templates
+│   │   └── ai_assistants
+│   └── utils
+├── cdn_zones
+├── infra
+├── org
+│   └── registries
+├── overall_context
+│   ├── backup
+│   ├── cdn_zones
+│   ├── data
+│   ├── utils
+│   ├── validators
+│   └── vectorizer
+│       └── engines
+├── studio_core
+│   └── settings
+└── .venv
+    ├── bin
+    ├── include
+    │   └── python3.13
+    ├── lib
+    │   └── python3.13
+    │       └── site-packages
+    ├── lib64 -> lib
+    └── share
+        └── man
+            └── man1
+
+38 directories
+backend/ai_assistants
+├── admin.py
+├── apps.py
+├── file_reader.py
+├── fixtures
+│   ├── agents_json
+│   ├── import_agents_from_json.py
+│   └── __init__.py
+├── __init__.py
+├── management
+│   └── commands
+│       └── import_agents.py
+├── migrations
+│   ├── 0001_initial.py
+│   ├── 0002_agentprofile_manifesto_alter_jaredlog_tags.py
+│   ├── 0003_agentmessagelog_agentimpactreport.py
+│   ├── 0004_remove_agentprofile_metadata_and_more.py
+│   ├── 0005_agentmessagelog_agent_cible_agentmessagelog_auteur_and_more.py
+│   ├── 0006_agentsystemcontext.py
+│   └── __init__.py
+├── models.py
+├── signals.py
+├── tests.py
+├── urls.py
+├── utils
+│   ├── agent_schema.py
+│   ├── context_cache.py
+│   ├── db_loader.py
+│   ├── impact_analyzer.py
+│   ├── __init__.py
+│   └── team_client.py
+├── utils.py
+└── views.py
+
+7 directories, 26 files
+agents_registry.json
+bruce_agent.json
+claire_agent.json
+dan_agent.json
+eva_agent.json
+heider_agent.json
+jared_agent.json
+jonas_agent.json
+julien_agent.json
+marty_agent.json
+nova_agent.json
+rand_agent.json
+sarah_agent.json
+shafi_agent.json
+shay_agent.json
+talia_agent.json
+tom_agent.json

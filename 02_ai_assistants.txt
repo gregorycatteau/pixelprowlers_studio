@@ -1,0 +1,35 @@
+backend/ai_assistants
+├── admin.py
+├── apps.py
+├── file_reader.py
+├── fixtures
+│   ├── agents_json
+│   ├── import_agents_from_json.py
+│   └── __init__.py
+├── __init__.py
+├── management
+│   └── commands
+│       └── import_agents.py
+├── migrations
+│   ├── 0001_initial.py
+│   ├── 0002_agentprofile_manifesto_alter_jaredlog_tags.py
+│   ├── 0003_agentmessagelog_agentimpactreport.py
+│   ├── 0004_remove_agentprofile_metadata_and_more.py
+│   ├── 0005_agentmessagelog_agent_cible_agentmessagelog_auteur_and_more.py
+│   ├── 0006_agentsystemcontext.py
+│   └── __init__.py
+├── models.py
+├── signals.py
+├── tests.py
+├── urls.py
+├── utils
+│   ├── agent_schema.py
+│   ├── context_cache.py
+│   ├── db_loader.py
+│   ├── impact_analyzer.py
+│   ├── __init__.py
+│   └── team_client.py
+├── utils.py
+└── views.py
+
+7 directories, 26 files

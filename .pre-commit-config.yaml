@@ -1,0 +1,72 @@
+# .pre-commit-config.yaml
+# Configuration des hooks de qualité et sécurité PixelProwlers
+# Documentation: https://pre-commit.com
+
+repos:
+  # --- Python: formatage & lint backend ---
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+        language_version: python3.13
+
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+
+  # - repo: https://github.com/PyCQA/flake8
+  #   rev: 7.1.1
+  #   hooks:
+  #     - id: flake8
+  #       additional_dependencies:
+  #         - flake8-bugbear
+  #         - flake8-comprehensions
+  #         - flake8-print
+
+  # --- Sécurité backend (Bandit) — temporarily disabled ---
+  # - repo: https://github.com/PyCQA/bandit
+  #   rev: 1.8.6
+  #   hooks:
+  #     - id: bandit
+  #       args: ["-c", ".bandit.yaml", "-r", "backend"]
+
+  # - repo: https://github.com/Yelp/detect-secrets
+  #   rev: v1.5.0
+  #   hooks:
+  #     - id: detect-secrets
+  #       args:
+  #         - --baseline
+  #         - .secrets.baseline
+  #         - --exclude-files
+  #         - '(env/|node_modules/|\.nuxt/|cdn/embeddings/|backend/agents/agents_registry\.json)'
+
+  # --- Frontend via npm dans ./frontend --- (temporarily disabled)
+  # - repo: local
+  #   hooks:
+  #     - id: frontend-eslint
+  #       name: frontend eslint (fix)
+  #       entry: bash -lc "cd frontend && npm run -s lint:fix"
+  #       language: system
+  #       pass_filenames: false
+  #
+  #     - id: frontend-prettier
+  #       name: frontend prettier (write)
+  #       entry: bash -lc "cd frontend && npm run -s format"
+  #       language: system
+  #       pass_filenames: false
+  #
+  #     - id: frontend-stylelint
+  #       name: frontend stylelint (check)
+  #       entry: bash -lc "cd frontend && npm run -s stylelint"
+  #       language: system
+  #       pass_filenames: false
+
+  # --- Hooks divers (nettoyage, fin de fichier) ---
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: ["--fix=lf"]

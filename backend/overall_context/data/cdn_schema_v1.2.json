@@ -1,0 +1,139 @@
+{
+  "schema_version": "1.2.0",
+  "description": "Bloc de zone logique pour le CDN PixelProwlers – v1.2. Extension v1.1 : zone_type, bindings squads/agents, RAG/FinOps/LLM policy, provenance signée, deception_controls, interfaces, SLOs/KPIs. Rétro-compatible 1.1.",
+  "structure": {
+    "id": "Zx",
+    "code": "TAXON_PLACEHOLDER",
+    "label": "Nom lisible de la zone",
+    "description": "Définition fonctionnelle/métier de cette zone dans le plan global.",
+    "zone_type": "best_practice",
+    "intent_scope": [
+      "objectif principal de la zone",
+      "types d'informations attendues",
+      "valeurs de contexte associées"
+    ],
+    "bindings": {
+      "squad_ids": [],
+      "agent_ids": []
+    },
+    "interfaces": {
+      "to_zones": [],
+      "from_zones": []
+    },
+    "access_policy": {
+      "default_sensitivity": "internal",
+      "visibility_levels": [
+        "public",
+        "clients",
+        "project_member",
+        "external_admin",
+        "internal_admin",
+        "ngner_only",
+        "striker_only",
+        "redteam_only",
+        "hidden"
+      ],
+      "auth_required": true,
+      "queryable_by_default": false,
+      "project_specific_overrides": true
+    },
+    "rag_config": {
+      "embedding_profile": "local_bge_small",
+      "chunking": { "strategy": "markdown", "max_chars": 1500, "overlap": 150 },
+      "boost_tags": ["critical_context", "policy_reference"],
+      "citation_required": true,
+      "freshness_max_days": 180,
+      "index_visibility": ["public", "clients", "project_member", "redteam_only"]
+    },
+    "provenance": {
+      "sources": [],
+      "hash": "",
+      "gpg_signature": "",
+      "verified": false,
+      "reproduced_in_lab": false,
+      "lab_notes": ""
+    },
+    "deception_controls": {
+      "enabled": false,
+      "deception_level": "none",
+      "honey_rank": 0,
+      "canary_tokens": [],
+      "decoy_variants": 0
+    },
+    "versioning_policy": {
+      "strategy": "immutable",
+      "require_changelog": true,
+      "retention_policy": "contextual",
+      "retention_rules": {
+        "prod_feature": "infinite",
+        "internal_doc": "6_months",
+        "sensitive_logs": "30_days",
+        "pentest_files": "suppress_retention"
+      }
+    },
+    "security_controls": {
+      "encrypt_by_default": true,
+      "cloud_storage_allowed": false,
+      "context_injection_allowed": false,
+      "access_logs_required": true,
+      "sensitive_keywords_trigger": ["exploit", "token", "pwd", "ssh_key"],
+      "tamperproof_required": true
+    },
+    "model_policies": {
+      "llm_policy_ref": "ops/ai_policy.yml",
+      "finops_policy_ref": "ops/finops_policy.yml"
+    },
+    "slo_kpis": {
+      "slos": [],
+      "kpis": []
+    },
+    "metrics_template": {
+      "track_usage": true,
+      "track_last_accessed": true,
+      "track_modifications": true,
+      "log_extraction_attempts": true,
+      "alert_on_unauthorized_access": true,
+      "anomaly_score": {
+        "enabled": true,
+        "weighting": {
+          "access_frequency": 0.2,
+          "deviation_from_role": 0.4,
+          "context_leak_risk": 0.4
+        }
+      },
+      "forensic_hooks": {
+        "on_delete": "dump_to_vault",
+        "on_access_by_redflagged_role": "mirror_to_monitoring",
+        "on_contextual_conflict": "trigger_alert_chain"
+      }
+    },
+    "structure_schema": {
+      "has_subzones": true,
+      "subzone_prefix": "Zx.y",
+      "recommended_subzones": [
+        {
+          "id": "Zx.1",
+          "label": "Nom de sous-zone 1",
+          "description": "Objectif de la sous-zone",
+          "preferred_formats": ["json", "md", "pdf"],
+          "priority_hint": 0.9
+        }
+      ]
+    },
+    "recommended_tags": [
+      "critical_context",
+      "design_system",
+      "policy_reference",
+      "client_scope",
+      "pentest_sensitive",
+      "fallback_content",
+      "legal_constraints",
+      "a11y_audit",
+      "interface_contract",
+      "agent_instruction",
+      "code_base_map",
+      "anomaly_trigger"
+    ],
+    "notes": "Modèle taxonomique 1.2 : organisation-aware, RAG-ready, deception-aware, finops+llm policy-aware."
+  }
+}

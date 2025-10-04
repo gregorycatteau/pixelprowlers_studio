@@ -1,0 +1,28 @@
+{
+  "policy_version": "1.0.0",
+  "default_schema_version": "1.1.0",
+  "modification_rules": {
+    "restricted_zones": ["Z5", "Z10"],
+    "requires_review": true,
+    "review_roles": ["internal_admin"],
+    "two_person_rule": true,
+    "allowed_edit_roles": ["internal_admin", "project_member"],
+    "forbidden_edit_roles": ["clients", "external_admin"]
+  },
+  "security_enforcement": {
+    "encrypt_by_default": true,
+    "backup_on_change": true,
+    "backup_target": "./.context_backups",
+    "log_all_changes": true,
+    "tamperproof_required": true
+  },
+  "retention_enforcement": {
+    "apply_retention_rules": true,
+    "grace_period_days": 3
+  },
+  "visibility_defaults": {
+    "queryable_by_default": false,
+    "default_sensitivity": "internal"
+  },
+  "notes": "La politique est chargée par l'app overall_context et appliquée lors des opérations CRUD."
+}

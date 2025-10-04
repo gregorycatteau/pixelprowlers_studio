@@ -1,0 +1,55 @@
+{
+  "zone_id": "Z1",
+  "zone_label": "Gouvernance & Stratégie",
+  "zone_code": "GOUV",
+  "usage_description": "Blocs liés à la vision stratégique, au manifeste, aux cadres éthiques et aux objectifs long terme.",
+  "visibility": "internal-admin",
+  "retention_policy": "infinite",
+  "tags": ["stratégie", "manifeste", "vision", "gouvernance", "priorité"],
+  "updated_at": "2025-08-01T18:00:00+02:00",
+  "content": {
+    "manifesto": {
+      "principles": [
+        {
+          "title": "Exploration et Innovation",
+          "description": "Nous valorisons l’expérimentation, la curiosité et l’adaptation constante face aux environnements complexes. PixelProwlers explore des terrains vierges pour concevoir des solutions utiles et durables."
+        },
+        {
+          "title": "Expression Artistique",
+          "description": "Le code est une matière vivante. Nous concevons nos projets comme des œuvres collectives, où design, architecture, utilité et esthétisme s’expriment à l’unisson."
+        },
+        {
+          "title": "Expériences Utilisateur Révolutionnaires",
+          "description": "Chaque ligne de code est pensée pour améliorer l’expérience humaine. Nous concevons des interfaces intuitives, accessibles et émotionnellement impactantes."
+        },
+        {
+          "title": "Collaboration et Communauté",
+          "description": "PixelProwlers n’est pas un produit. C’est une communauté vivante d’acteurs engagés. Nous développons en open source, documentons en profondeur, et co-construisons avec nos usagers."
+        },
+        {
+          "title": "Éthique et Durabilité",
+          "description": "Chaque choix technique est guidé par une conscience éthique. Respect de la vie privée, sobriété numérique, accessibilité, et transparence sont des piliers inaliénables."
+        },
+        {
+          "title": "Évolution et Adaptabilité",
+          "description": "PixelProwlers est une base modulaire, évolutive et contextuelle. Chaque brique s’adapte au projet sans le dévorer. L’infrastructure est un support, jamais une prison."
+        }
+      ]
+    },
+    "long_term_vision": {
+      "summary": "Faire de PixelProwlers un référentiel européen de conception numérique durable, éthique et souverain.",
+      "targets": {
+        "communautés_servies": 50,
+        "agents_ia_opérationnels": 40,
+        "outils_open_source_libérés": 120
+      }
+    },
+    "ethical_guidelines": {
+      "privacy_first": true,
+      "open_source_preference": true,
+      "zero_tracking_by_default": true,
+      "human_in_the_loop": true,
+      "refus_de_l’obsolescence_programmée": true
+    }
+  }
+}

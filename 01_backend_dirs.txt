@@ -1,0 +1,40 @@
+backend
+├── accounts
+│   └── management
+│       └── commands
+├── agents
+├── ai_assistants
+│   ├── fixtures
+│   │   └── agents_json
+│   ├── management
+│   │   └── commands
+│   ├── templates
+│   │   └── ai_assistants
+│   └── utils
+├── cdn_zones
+├── infra
+├── org
+│   └── registries
+├── overall_context
+│   ├── backup
+│   ├── cdn_zones
+│   ├── data
+│   ├── utils
+│   ├── validators
+│   └── vectorizer
+│       └── engines
+├── studio_core
+│   └── settings
+└── .venv
+    ├── bin
+    ├── include
+    │   └── python3.13
+    ├── lib
+    │   └── python3.13
+    │       └── site-packages
+    ├── lib64 -> lib
+    └── share
+        └── man
+            └── man1
+
+38 directories

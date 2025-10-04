@@ -1,0 +1,113 @@
+{
+  "registry_version": "1.0.1",
+  "generated_at": "2025-08-19T14:30:00+02:00",
+  "entries": [
+    { "id": "portfolio_strategy", "name": "Portfolio & Stratégie", "status": "active", "tags": ["core"],
+      "raison_d_etre": "Orienter l'énergie là où l'impact est maximal.",
+      "circle_roles": { "lead": "Jared", "facilitator": "Marty", "secretary": "Marty", "risk_officer": "Max" } },
+
+    { "id": "build_studio", "name": "Build Studio", "status": "active", "tags": ["core"],
+      "raison_d_etre": "Livrer des apps sobres, sûres, performantes.",
+      "circle_roles": { "lead": "Dan", "facilitator": "Marty", "secretary": "Dan", "risk_officer": "Eva" } },
+
+    { "id": "collab_core_ops", "name": "Collab Core Ops", "status": "active", "tags": ["core"],
+      "raison_d_etre": "Fournir la productivité clé-en-main (fichiers, projets).",
+      "circle_roles": { "lead": "Jez", "facilitator": "Marty", "secretary": "Jez", "risk_officer": "Eva" } },
+
+    { "id": "comms_factory", "name": "Comms Factory", "status": "active", "tags": ["core"],
+      "raison_d_etre": "Publier automatiquement à partir d’“approved”.",
+      "circle_roles": { "lead": "Claire", "facilitator": "Marty", "secretary": "Claire", "risk_officer": "Max" } },
+
+    { "id": "intel_scraping", "name": "Intel/Scraping – Best Practices", "status": "active", "tags": ["core"],
+      "raison_d_etre": "Maintenir une base vivante de meilleures pratiques vérifiées.",
+      "circle_roles": { "lead": "Sebastien", "facilitator": "Marty", "secretary": "Ilya", "risk_officer": "Eva" } },
+
+    { "id": "db_crypto_services", "name": "DB & Crypto Services", "status": "active", "tags": ["core"],
+      "raison_d_etre": "Stockage parano + webhooks signés + honey-shards.",
+      "circle_roles": { "lead": "Bruce", "facilitator": "Marty", "secretary": "Bruce", "risk_officer": "Eva" } },
+
+    { "id": "blue_team", "name": "Blue Team", "status": "active", "tags": ["core"],
+      "raison_d_etre": "Verrouiller l’attaque avant qu’elle n’arrive.",
+      "circle_roles": { "lead": "Eva", "facilitator": "Charity", "secretary": "Scott", "risk_officer": "Max" } },
+
+    { "id": "red_team", "name": "Red Team – Offensive", "status": "active", "tags": ["core"],
+      "raison_d_etre": "Tester sans pitié la posture sécurité.",
+      "circle_roles": { "lead": "Kevin", "facilitator": "Charity", "secretary": "Kevin", "risk_officer": "Max" } },
+
+    { "id": "purple_team", "name": "Purple Team", "status": "active", "tags": ["core"],
+      "raison_d_etre": "Transformer chaque attaque en progrès mesurable.",
+      "circle_roles": { "lead": "Eva", "facilitator": "Charity", "secretary": "Jez", "risk_officer": "Max" } },
+
+    { "id": "sre_platform", "name": "SRE & Platform", "status": "active", "tags": ["core"],
+      "raison_d_etre": "Fiabilité + 1-clic deploy + observabilité utile.",
+      "circle_roles": { "lead": "Charity", "facilitator": "Marty", "secretary": "Charity", "risk_officer": "Eva" } },
+
+    { "id": "prospect_intel", "name": "Prospect Intelligence", "status": "active", "tags": ["core"],
+      "raison_d_etre": "Cartographier éthiquement l’écosystème et enrichir le CRM.",
+      "circle_roles": { "lead": "Marty", "facilitator": "Claire", "secretary": "Marty", "risk_officer": "Max" } },
+
+    { "id": "prospection_gtm", "name": "Prospection & Go-To-Market", "status": "active", "tags": ["core"],
+      "raison_d_etre": "Prise de contact respectueuse et personnalisée.",
+      "circle_roles": { "lead": "Claire", "facilitator": "Marty", "secretary": "Claire", "risk_officer": "Max" } },
+
+    { "id": "governance_compliance", "name": "Gouvernance & Conformité", "status": "active", "tags": ["core"],
+      "raison_d_etre": "RGPD, consentements, registres, DPIA.",
+      "circle_roles": { "lead": "Max", "facilitator": "Marty", "secretary": "Max", "risk_officer": "Max" } },
+
+    { "id": "model_governance_cost", "name": "Model Governance & Cost Gate", "status": "active", "tags": ["core"],
+      "raison_d_etre": "Coûts IA sous contrôle + respect des policies.",
+      "circle_roles": { "lead": "Chip", "facilitator": "Jared", "secretary": "Chip", "risk_officer": "Max" } },
+
+    { "id": "enablement_training", "name": "Enablement & Formation", "status": "active", "tags": ["core"],
+      "raison_d_etre": "Rendre le client autonome via wiki + capsules.",
+      "circle_roles": { "lead": "Claire", "facilitator": "Marty", "secretary": "Claire", "risk_officer": "Max" } },
+
+    { "id": "context_cdn_ontology", "name": "Context CDN & Ontology", "status": "active", "tags": ["extension"],
+      "raison_d_etre": "Cerveau collectif: taxonomie, RAG, versions, decoy zones.",
+      "circle_roles": { "lead": "Dan", "facilitator": "Marty", "secretary": "Claire", "risk_officer": "Eva" } },
+
+    { "id": "supply_chain_sbom", "name": "Supply-Chain & SBOM", "status": "active", "tags": ["extension"],
+      "raison_d_etre": "Neutraliser dependency confusion, CVE, typosquatting.",
+      "circle_roles": { "lead": "Kim", "facilitator": "Charity", "secretary": "Kim", "risk_officer": "Max" } },
+
+    { "id": "deception_counterintel", "name": "Deception Engineering & Counter-Intel", "status": "active", "tags": ["extension"],
+      "raison_d_etre": "Piéger, profiler, retarder l’attaquant.",
+      "circle_roles": { "lead": "Lance", "facilitator": "Kevin", "secretary": "Lance", "risk_officer": "Max" } },
+
+    { "id": "incident_response_hunting", "name": "Incident Response & Threat Hunting", "status": "active", "tags": ["extension"],
+      "raison_d_etre": "Préparer, détecter, répondre et apprendre.",
+      "circle_roles": { "lead": "Eva", "facilitator": "Charity", "secretary": "Jez", "risk_officer": "Max" } },
+
+    { "id": "finops_llmops_greenops", "name": "FinOps/LLMOps & GreenOps", "status": "active", "tags": ["extension"],
+      "raison_d_etre": "Maîtriser coûts IA et empreinte carbone.",
+      "circle_roles": { "lead": "Chip", "facilitator": "Jared", "secretary": "Chip", "risk_officer": "Max" } },
+
+    { "id": "release_engineering_devex", "name": "Release Engineering & DevEx", "status": "active", "tags": ["extension"],
+      "raison_d_etre": "Golden path dev, DX rapide, preview envs.",
+      "circle_roles": { "lead": "Charity", "facilitator": "Marty", "secretary": "Charity", "risk_officer": "Eva" } },
+
+    { "id": "data_migration_interop", "name": "Data Migration & Interop", "status": "active", "tags": ["extension"],
+      "raison_d_etre": "Sortir du legacy sans casse (ETL/ELT, mapping).",
+      "circle_roles": { "lead": "Bruce", "facilitator": "Marty", "secretary": "Bruce", "risk_officer": "Eva" } },
+
+    { "id": "i18n_a11y_ops", "name": "i18n & A11y Ops", "status": "active", "tags": ["extension"],
+      "raison_d_etre": "Multilingue robuste + accessibilité enforce.",
+      "circle_roles": { "lead": "Marcy", "facilitator": "Claire", "secretary": "Marcy", "risk_officer": "Max" } },
+
+    { "id": "legal_policy_intel", "name": "Legal & Policy Intelligence", "status": "active", "tags": ["extension"],
+      "raison_d_etre": "Veille RGPD/ePrivacy/Accessibilité & licences.",
+      "circle_roles": { "lead": "Max", "facilitator": "Marty", "secretary": "Max", "risk_officer": "Max" } },
+
+    { "id": "payments_commerce_secure", "name": "Payments & Commerce Secure", "status": "active", "tags": ["extension"],
+      "raison_d_etre": "Paiements fiat/crypto sûrs, simples, audités.",
+      "circle_roles": { "lead": "Bruce", "facilitator": "Marty", "secretary": "Bruce", "risk_officer": "Max" } },
+
+    { "id": "mobile_edge_ops", "name": "Mobile & Edge Field Ops", "status": "active", "tags": ["extension"],
+      "raison_d_etre": "Offline-first, PWA, sync robuste terrain.",
+      "circle_roles": { "lead": "Dan", "facilitator": "Marty", "secretary": "Dan", "risk_officer": "Eva" } },
+
+    { "id": "observability_chaos", "name": "Observability & Chaos Engineering", "status": "active", "tags": ["extension"],
+      "raison_d_etre": "Voir tôt, casser sans douleur, prouver la résilience.",
+      "circle_roles": { "lead": "Charity", "facilitator": "Marty", "secretary": "Charity", "risk_officer": "Eva" } }
+  ]
+}

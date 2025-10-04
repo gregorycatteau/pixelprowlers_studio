@@ -1,0 +1,38 @@
+# Bandit config — PixelProwlers Studio (starter minimal)
+# Compatible with Bandit >= 1.7.x
+#
+# Usage (local):
+#   cd backend
+#   bandit -q -r . -c bandit.yaml
+#
+# Notes:
+# - This starter intentionally keeps configuration minimal and defers policy (severity/confidence gates)
+#   to CI flags so we can tighten progressively.
+# - Directory-level exclusions only; individual test files (e.g. tests.py) are better excluded via CLI (-x)
+#   until we standardize tests/ layout across apps.
+
+# IDs to skip globally (document each skip with justification in the PR)
+# Example: ["B101","B603"]
+skips: []
+
+# Run all tests (null) — alternatively, list specific IDs to include
+# Example: ["B301","B302","B303"]
+tests: null
+
+# Exclude common non-product code directories
+exclude_dirs:
+  - "migrations"
+  - "tests"
+  - ".venv"
+  - "venv"
+  - "node_modules"
+
+# Policy (severity/confidence) should be controlled by CI flags for now, e.g.:
+#   -lll            # show LOW/MEDIUM/HIGH
+#   --confidence    # MEDIUM/HIGH in later phases
+#
+# Example CI (non-blocking baseline):
+#   bandit -q -r . -x "*/migrations/*,*/tests/*" || true
+#
+# Example CI (using this config once policy is approved):
+#   bandit -q -r . -c bandit.yaml || true
