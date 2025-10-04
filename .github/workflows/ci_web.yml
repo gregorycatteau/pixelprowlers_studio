@@ -191,13 +191,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Python deps — pip-audit (export Poetry) — non blocking (guarded)
+      - name: Python deps — pip-audit (block High/Critical with allowlist)
         working-directory: backend
         run: |
-          pipx install poetry pip-audit
+          pipx install poetry pip-audit >/dev/null 2>&1 || true
           if [ -f pyproject.toml ]; then
             poetry export -f requirements.txt --without-hashes -o /tmp/req.txt
-            pip-audit -r /tmp/req.txt || true
+            # Allowlist (IDs) — optional, minimal and dated; format: one ID per line, '#' for comments.
+            ALLOWLIST="backend/security/pip-audit-allowlist.txt"
+            IGNORE_ARGS=""
+            if [ -f "$ALLOWLIST" ]; then
+              # Build --ignore-vuln args from file (skip comments/blank)
+              IGNORE_ARGS=$(grep -v '^\s*#' "$ALLOWLIST" | awk '{print "--ignore-vuln "$1}' | xargs -r echo)
+            fi
+            # Run audit, produce JSON report
+            pip-audit -r /tmp/req.txt $IGNORE_ARGS -f json -o /tmp/pip_audit.json || true
+            # Fail the job if any HIGH/CRITICAL remain
+            if command -v jq >/dev/null 2>&1; then
+              COUNT=$(jq '[.. | objects | select(has("severity")) | select(.severity=="HIGH" or .severity=="CRITICAL")] | length' /tmp/pip_audit.json)
+              if [ "$COUNT" -gt 0 ]; then
+                echo "pip-audit: $COUNT HIGH/CRITICAL vulnerabilities detected"; exit 1
+              fi
+            else
+              echo "jq missing; failing to avoid false negatives"; exit 1
+            fi
           else
             echo "No pyproject.toml; skipping pip-audit"
           fi
