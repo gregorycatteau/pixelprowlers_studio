@@ -108,13 +108,6 @@ INSTALLED_APPS = [
     "api",
 ]
 
-# Optionally include API app skeleton if present (safe import)
-try:
-    import api  # type: ignore  # noqa: F401
-
-    INSTALLED_APPS.append("api")
-except Exception:
-    pass
 
 # CORS (si présent)
 try:

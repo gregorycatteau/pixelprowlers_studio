@@ -52,7 +52,7 @@
 
 /* Header */
 .app-header {
-  @apply sticky top-0 z-40 border-b border-emerald-700/30 bg-black/30 backdrop-blur;
+  @apply sticky top-0 z-40 border-b border-emerald-700/30 bg-black backdrop-blur;
 }
 .header-inner {
   @apply mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6;
@@ -73,13 +73,11 @@
 }
 
 /* Contenu */
-.app-main {
-  @apply flex-1 px-4 py-6 sm:px-6;
-}
+
 
 /* Footer */
 .app-footer {
-  @apply border-t border-slate-700/40 bg-black/30;
+  @apply border-t border-slate-700 bg-black;
 }
 .foot-note {
   @apply mx-auto max-w-6xl px-4 py-4 text-sm text-slate-400 sm:px-6;

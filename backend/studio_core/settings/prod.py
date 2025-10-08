@@ -34,6 +34,17 @@ if len(SECRET_KEY) < 64 or SECRET_KEY.startswith("django-insecure-"):
 # --- Import durcissement ---
 from .security import *  # noqa
 
+# --- Password hashing (Argon2id en priorité) ---
+# Renforce le hachage des mots de passe en production. Conserver des hashers
+# de fallback pour lecture (migration progressive des anciens hashers).
+PASSWORD_HASHERS = [
+    "django.contrib.auth.hashers.Argon2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
+    "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
+    "django.contrib.auth.hashers.ScryptPasswordHasher",
+]
+
 # --- DB obligatoire en prod ---
 if "DATABASE_URL" not in os.environ:
     raise RuntimeError("DATABASE_URL manquante en production.")

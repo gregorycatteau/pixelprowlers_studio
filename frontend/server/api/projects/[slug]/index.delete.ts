@@ -1,5 +1,6 @@
 import type { H3Event } from 'h3'
-import { djangoBase } from '~/server/utils/djangoBase'
+import { djangoBase } from '~~/server/utils/djangoBase'
+
 
 /**
  * Server route (SSR) — Delete Project by slug

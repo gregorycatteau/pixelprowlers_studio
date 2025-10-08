@@ -1,0 +1,32 @@
+services:
+  backend:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  backend_consumer:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # Sanity check n8n
+  n8n:
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:5678/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # NATS Server + Monitoring (JetStream activé)
+  nats:
+    image: nats:2
+    command: ["-js", "-m", "8222", "--http_port", "8222", "--server_name=pxp_nats"]
+    restart: unless-stopped
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  nats_data:

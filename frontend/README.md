@@ -74,6 +74,46 @@ bun run preview
 
 Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
 
+## Lint & Format
+
+Recommended local quality checks:
+
+```bash
+# ESLint (JS/TS/Vue)
+npm run lint
+
+# TypeScript type-check
+npm run typecheck
+
+# Stylelint (CSS/Tailwind)
+npm run stylelint
+
+# Prettier (format) — if no npm script is defined, use npx directly:
+npm run format || npx prettier -w .
+```
+
+Notes:
+- Ensure your editor uses the project Prettier config (.prettierrc) and ESLint config (eslint.config.mjs).
+- Tailwind class sorting is handled by the Tailwind v4/Vite integration; Stylelint checks basic rules.
+
+## Health page (Sprint 0)
+
+A minimal health page is available to verify the app and correlation headers:
+
+- URL (via Caddy): http://dev.localhost/health
+- Displays the incoming `X-Request-ID` and the ID returned by the backend (`/api/hello`)
+
+Example (set a custom correlation ID and check propagation end-to-end):
+
+```bash
+curl -sS -H 'X-Request-ID: demo-123' http://dev.localhost/health
+```
+
+Expected:
+- The page shows the same `X-Request-ID` received by Nuxt (inbound).
+- The call to the backend `/api/hello` echoes the `X-Request-ID` in the response headers/body.
+
+
 ## Tests & Coverage (Vitest)
 
 This project uses Vitest for unit tests. Basic commands:

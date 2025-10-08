@@ -1,6 +1,6 @@
 import type { H3Event } from 'h3'
-import type { ProjectCreateBody, ProjectResponse } from '~/shared/types/projects'
-import { djangoBase } from '~/server/utils/djangoBase'
+import type { ProjectCreateBody, ProjectResponse } from '~~/shared/types/projects'
+import { djangoBase } from '~~/server/utils/djangoBase'
 
 /**
  * Server route (SSR) — Create Project

@@ -182,6 +182,33 @@ def api_auth_whoami(request: HttpRequest) -> JsonResponse:
     )
 
 
+@require_POST
+@csrf_exempt
+def api_auth_theme(request: HttpRequest) -> JsonResponse:
+    """
+    POST /api/auth/theme/
+    Body: { "hue": <int 0-359> }
+    Stores the selected hue in the session (no PII), returns { ok: true }.
+    """
+    try:
+        data = json.loads(request.body.decode("utf-8")) if request.body else {}
+    except Exception:
+        return JsonResponse({"ok": False, "error": "bad_json"}, status=400)
+
+    try:
+        hue_raw = data.get("hue")
+        hue = int(hue_raw)
+    except Exception:
+        return JsonResponse({"ok": False, "error": "hue_required"}, status=400)
+
+    if not (0 <= hue <= 359):
+        return JsonResponse({"ok": False, "error": "hue_out_of_range"}, status=400)
+
+    request.session["pp_theme_hue"] = hue
+    request.session.modified = True
+    return JsonResponse({"ok": True}, status=200)
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 🚧 GATE — Étape 1 : absurdité flagrante
 # ──────────────────────────────────────────────────────────────────────────────

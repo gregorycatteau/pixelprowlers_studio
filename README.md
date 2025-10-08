@@ -78,3 +78,41 @@ docker/
 - Variables d’environnement: .env (commun) + .env.<APP_ENV> (dev/test/prod/upgrade)
 
 Bon build et bonne chasse aux pixels 🐾
+
+## Checkpoints Sprint 0 — Jour J (raccourcis)
+
+- CP#1 — Caddy headers + X-Request-ID
+  - Nuxt headers:
+    curl -I http://dev.localhost
+  - Django health:
+    curl -I http://api.dev.localhost/health
+
+- CP#2 — Postgres + NATS
+  - NATS subscribe (dojo):
+    docker run --rm -it --network host synadia/nats-box:0.14 \
+      nats sub -s nats://dojo_user:dojo_pass@127.0.0.1:4222 'intake.>'
+  - NATS publish (dojo):
+    docker run --rm -it --network host synadia/nats-box:0.14 \
+      nats pub -s nats://dojo_user:dojo_pass@127.0.0.1:4222 'intake.lead.created' \
+      '{"id":"demo-001","email":"alice@example.com","project_name":"Dojo"}'
+
+- CP#3 — n8n WF-01 (Intake→Roadmap)
+  - Trigger (POST):
+    curl -sS -X POST http://n8n.dev.localhost/webhook/intake \
+      -H 'Content-Type: application/json' \
+      -H 'X-Request-ID: demo-n8n-123' \
+      -d '{"email":"alice@example.com","project_name":"Dojo"}' | jq .
+
+## Curls utiles (DX rapide)
+
+- Corrélation bout-en-bout (Nuxt /health → Django /api/hello):
+    curl -sS -H 'X-Request-ID: demo-123' http://dev.localhost/health | jq .
+
+- OpenAPI (DRF Spectacular):
+    curl -sS http://api.dev.localhost/api/schema/ | head -n 40
+
+- API hello:
+    curl -sS http://api.dev.localhost/api/hello/ | jq .
+
+- Gate Sécurité v1 (Trivy + Semgrep):
+    ./ops/security/gate_v1.sh

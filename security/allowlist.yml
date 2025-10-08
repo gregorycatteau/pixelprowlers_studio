@@ -1,0 +1,28 @@
+# PixelProwlers Studio — CVE Allowlist (expiration ≤ 14 days)
+# This file is intentionally minimal. Keep it lean, explicit, and time‑boxed.
+#
+# Validation rules (enforced by CI):
+# - entries[].id (or entries[].cve) is required (CVE-YYYY-XXXX, GHSA-xxxx-yyyy-zzzz, etc.)
+# - entries[].justification is required (concise, actionable)
+# - entries[].expires_at is required (ISO 8601: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)
+# - Expires within ≤ 14 days from “now”; no extensions without a tracked security ticket
+# - Optional fields:
+#     tool: "pip-audit" | "osv" | "npm"
+#     packages: ["pkg1", "pkg2"]  # affected package names (best-effort)
+#
+# Example (uncomment and adapt if needed):
+#
+# entries:
+#   - id: "CVE-2025-12345"
+#     tool: "pip-audit"
+#     packages: ["libex"]
+#     justification: "Patch amont en cours; impact mitigé par CSP"
+#     expires_at: "2025-10-20T00:00:00Z"
+#   - id: "GHSA-aaaa-bbbb-cccc"
+#     tool: "osv"
+#     packages: ["frontend-lib"]
+#     justification: "Chemin de code inatteignable; refactor planifié"
+#     expires_at: "2025-10-15T00:00:00Z"
+#
+# Empty allowlist (default):
+entries: []

@@ -1,26 +1,26 @@
 <template>
-  <section class="mx-auto max-w-4xl p-6 space-y-6">
-    <header class="flex items-center justify-between">
-      <h1 class="text-2xl font-semibold">Projects</h1>
-      <NuxtLink to="/" class="text-sm text-blue-600 hover:underline">Back to Home</NuxtLink>
+  <section class="page">
+    <header class="pageHeader">
+      <h1 class="pageTitle">Projects</h1>
+      <NuxtLink to="/" class="backLink">Back to Home</NuxtLink>
     </header>
 
     <!-- Create Project -->
-    <form @submit.prevent="onCreate" class="space-y-3 border rounded p-4">
-      <h2 class="text-lg font-medium">Create a new project</h2>
+    <form @submit.prevent="onCreate" class="formCard">
+      <h2 class="formTitle">Create a new project</h2>
 
-      <div>
-        <label class="block text-sm font-medium mb-1">Name</label>
+      <div class="field">
+        <label class="label">Name</label>
         <input v-model="form.name" type="text" class="input" placeholder="Ex: Site Vitrine" required />
       </div>
 
-      <div>
-        <label class="block text-sm font-medium mb-1">Description</label>
+      <div class="field">
+        <label class="label">Description</label>
         <textarea v-model="form.description" class="input" placeholder="Optional short description" />
       </div>
 
-      <div>
-        <label class="block text-sm font-medium mb-1">Status</label>
+      <div class="field">
+        <label class="label">Status</label>
         <select v-model="form.status" class="input">
           <option value="draft">draft</option>
           <option value="active">active</option>
@@ -28,41 +28,49 @@
         </select>
       </div>
 
-      <div class="flex items-center gap-3">
+      <div class="formActions">
         <button class="btn" :disabled="creating">Create</button>
-        <span v-if="err" class="text-red-600 text-sm">{{ err }}</span>
-        <span v-if="ok" class="text-green-600 text-sm">Created</span>
+        <span v-if="err" class="statusError">{{ err }}</span>
+        <span v-if="ok" class="statusOk">Created</span>
       </div>
     </form>
 
     <!-- List Projects -->
-    <div class="space-y-2">
-      <div v-if="pending">Loading projects…</div>
-      <div v-else-if="fetchError" class="text-red-700">Failed to load: {{ fetchError }}</div>
-      <ul v-else class="divide-y">
-        <li v-for="p in projects" :key="p.slug" class="py-3 flex items-center justify-between">
-          <div class="min-w-0">
-            <NuxtLink :to="`/projects/${p.slug}`" class="text-blue-600 hover:underline break-words">
+    <div class="listWrap">
+      <div v-if="pending" class="loadingMessage">Loading projects…</div>
+      <div v-else-if="fetchError" class="errorMessage">Failed to load: {{ fetchError }}</div>
+
+      <ul v-else class="list">
+        <li v-for="p in projects" :key="p.slug" class="listItem">
+          <div class="itemLeft">
+            <NuxtLink :to="`/projects/${p.slug}`" class="projectLink">
               {{ p.name }}
             </NuxtLink>
-            <div class="text-xs text-gray-500 mt-0.5">
-              Status: <span class="font-medium">{{ p.status }}</span>
+            <div class="projectMeta">
+              Status: <span class="statusText">{{ p.status }}</span>
             </div>
           </div>
-          <div class="text-xs text-gray-400 shrink-0 ml-3">
+          <div class="itemRight">
             {{ formatDate(p.updated_at) }}
           </div>
         </li>
       </ul>
-      <div v-if="!pending && projects.length === 0" class="text-sm text-gray-500">No projects yet.</div>
+
+      <div v-if="!pending && projects.length === 0" class="emptyMessage">
+        No projects yet.
+      </div>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { Project, ProjectCreateBody } from '~/shared/types/projects'
+import type { Project, ProjectCreateBody } from '~~/shared/types/projects'
 
+/**
+ * Charge la liste des projets depuis l’API SSR (Nitro) — méthode GET.
+ * - Avantage sécu : pas de token exposé côté client.
+ */
 const {
   data,
   pending,
@@ -70,19 +78,37 @@ const {
   error: loadErr,
 } = await useFetch<Project[]>('/api/projects', { method: 'GET' })
 
+/**
+ * Liste des projets (toujours un tableau).
+ */
 const projects = computed<Project[]>(() => data.value || [])
-const fetchError = computed(() => loadErr.value ? (loadErr.value as any)?.statusMessage ?? 'Unknown error' : null)
 
+/**
+ * Message d’erreur lisible pour l’UI lors du chargement.
+ */
+const fetchError = computed(() =>
+  loadErr.value ? (loadErr.value as any)?.statusMessage ?? 'Unknown error' : null
+)
+
+/**
+ * Formulaire de création (modèle typé).
+ */
 const form = ref<ProjectCreateBody>({
   name: '',
   description: '',
   status: 'draft',
 })
 
+/** Indicateurs UI pour la création. */
 const creating = ref(false)
 const err = ref<string | null>(null)
 const ok = ref(false)
 
+/**
+ * formatDate(iso: string): string
+ * Formate une date ISO en chaîne lisible locale.
+ * - Sécurisé par try/catch pour éviter de casser l’UI si iso est invalide.
+ */
 function formatDate(iso: string): string {
   try {
     return new Date(iso).toLocaleString()
@@ -91,7 +117,14 @@ function formatDate(iso: string): string {
   }
 }
 
-const onCreate = async () => {
+/**
+ * onCreate(): Promise<void>
+ * Envoie la création de projet au backend via la route Nitro.
+ * - Réinitialise le formulaire en cas de succès.
+ * - Rafraîchit la liste (SSR fetch) pour refléter l’état serveur.
+ * - Gestion d’erreur propre avec message utilisateur.
+ */
+const onCreate = async (): Promise<void> => {
   err.value = null
   ok.value = false
   creating.value = true
@@ -113,6 +146,103 @@ const onCreate = async () => {
 </script>
 
 <style scoped>
-.input { @apply w-full border rounded px-2 py-1 outline-none focus:ring-2 focus:ring-blue-200; }
-.btn { @apply inline-flex items-center px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50; }
+@reference "@/assets/css/main.css";
+/* --- Layout global --- */
+.page {
+  @apply mx-auto max-w-4xl p-6 space-y-6;
+}
+
+.pageHeader {
+  @apply flex items-center justify-between;
+}
+
+.pageTitle {
+  @apply text-2xl font-semibold;
+}
+
+.backLink {
+  @apply text-sm text-blue-600 hover:underline;
+}
+
+/* --- Carte formulaire --- */
+.formCard {
+  @apply space-y-3 border rounded-md p-4;
+}
+
+.formTitle {
+  @apply text-lg font-medium;
+}
+
+.field {
+  @apply space-y-1;
+}
+
+.label {
+  @apply block text-sm font-medium mb-1;
+}
+
+.input {
+  @apply w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-blue-200;
+}
+
+.btn {
+  @apply inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50;
+}
+
+.formActions {
+  @apply flex items-center gap-3;
+}
+
+.statusError {
+  @apply text-red-600 text-sm;
+}
+
+.statusOk {
+  @apply text-green-600 text-sm;
+}
+
+/* --- Liste des projets --- */
+.listWrap {
+  @apply space-y-2;
+}
+
+.loadingMessage {
+  @apply text-sm text-gray-600;
+}
+
+.errorMessage {
+  @apply text-red-700;
+}
+
+.list {
+  @apply divide-y;
+}
+
+.listItem {
+  @apply py-3 flex items-center justify-between;
+}
+
+.itemLeft {
+  @apply min-w-0;
+}
+
+.projectLink {
+  @apply text-blue-600 hover:underline break-words;
+}
+
+.projectMeta {
+  @apply text-xs text-gray-500 mt-0.5;
+}
+
+.statusText {
+  @apply font-medium;
+}
+
+.itemRight {
+  @apply text-xs text-gray-400 shrink-0 ml-3;
+}
+
+.emptyMessage {
+  @apply text-sm text-gray-500;
+}
 </style>

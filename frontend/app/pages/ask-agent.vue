@@ -140,7 +140,7 @@ async function sendToAgent(message: string) {
 
 /* === Layout global === */
 .ask-wrap {
-  @apply min-h-screen px-4 py-8 sm:px-6;
+  @apply min-h-screen mx-auto  sm:px-6 bg-black rounded-lg;
   background-image:
     radial-gradient(1200px 600px at 10% -10%, rgba(124, 58, 237, 0.18), transparent),
     radial-gradient(1000px 500px at 110% 10%, rgba(34, 211, 238, 0.12), transparent);
@@ -148,7 +148,7 @@ async function sendToAgent(message: string) {
 
 /* === Hero === */
 .hero {
-  @apply mx-auto mb-8 max-w-6xl;
+  @apply mx-auto mb-8 pt-4 max-w-6xl;
 }
 .hero-title {
   @apply flex items-center gap-3;

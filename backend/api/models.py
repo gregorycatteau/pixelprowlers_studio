@@ -157,3 +157,56 @@ class Project(models.Model):
     def get_absolute_url(self) -> str:
         # Placeholder URL pattern; wire it to your router/UI when available.
         return f"/projects/{self.slug}/"
+
+
+class Lead(models.Model):
+    """
+    Minimal persisted intake event (MVO) for Sprint 1.
+    Stores the essential fields to support auditing and basic reporting.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+
+    # Business-identifying fields
+    event_id = models.CharField(
+        max_length=128,
+        db_index=True,
+        help_text="Event unique ID from upstream (e.g., lead_xxx).",
+    )
+    email = models.EmailField(max_length=254)
+    project_name = models.CharField(max_length=200)
+
+    # Observability / correlation
+    request_id = models.CharField(
+        max_length=128,
+        blank=True,
+        default="",
+        help_text="Correlation ID (X-Request-ID) propagated across services.",
+    )
+    received_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    # Optional raw payload for audit/debug (no secrets/PII)
+    raw = models.JSONField(
+        blank=True,
+        default=dict,
+        help_text="Raw event payload as received by the gateway (avoid PII/secrets).",
+    )
+
+    class Meta:
+        db_table = "api_lead"
+        verbose_name = "Lead"
+        verbose_name_plural = "Leads"
+        ordering = ("-received_at", "id")
+        indexes = [
+            models.Index(fields=("event_id",), name="lead_event_id_idx"),
+            models.Index(fields=("email",), name="lead_email_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("event_id",),
+                name="lead_unique_event_id",
+            )
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"{self.email} — {self.project_name}"

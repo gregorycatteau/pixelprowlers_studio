@@ -7,6 +7,7 @@ urlpatterns = [
     path("auth/creds/", views.api_auth_creds, name="api_auth_creds"),
     path("auth/logout/", views.api_auth_logout, name="api_auth_logout"),
     path("auth/whoami/", views.api_auth_whoami, name="api_auth_whoami"),
+    path("auth/theme/", views.api_auth_theme, name="api_auth_theme"),
     # Gates
     path("gates/absurdity-check", views.api_gate_absurdity_check, name="api_gate_absurdity_check"),
     path("gates/challenge-init", views.api_gate_challenge_init, name="api_gate_challenge_init"),

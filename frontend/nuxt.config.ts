@@ -30,7 +30,10 @@ export default defineNuxtConfig({
     DJANGO_BASE_URL: process.env.NUXT_DJANGO_BASE_URL || 'http://localhost:8000',
     // Public (exposé au client si besoin)
     public: {
-      DJANGO_BASE_URL: process.env.NUXT_DJANGO_BASE_URL || 'http://localhost:8000',
+      DJANGO_BASE_URL:
+        process.env.NUXT_PUBLIC_DJANGO_BASE_URL ||
+        process.env.NUXT_DJANGO_BASE_URL ||
+        'http://localhost:8000',
     },
   },
 })

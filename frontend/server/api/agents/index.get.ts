@@ -1,5 +1,5 @@
 import type { H3Event } from 'h3'
-import type { AgentsResponse, AgentSummary } from '~/shared/types/agents'
+import type { AgentsResponse, AgentSummary } from '~~/shared/types/agents'
 
 export default defineEventHandler(async (event: H3Event): Promise<AgentsResponse> => {
   const cfg = useRuntimeConfig(event)

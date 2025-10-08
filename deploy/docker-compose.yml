@@ -1,0 +1,240 @@
+
+# PixelProwlers Studio — Sprint 0 (Jour J) — docker-compose
+#
+# Services:
+# - caddy        (reverse proxy + headers sécu, X-Request-ID via Caddyfile)
+# - frontend     (Nuxt dev server, port 3000)
+# - backend      (Django/DRF dev server, port 8000)
+# - postgres     (PostgreSQL 17, 2 DB: pxp_app, pxp_n8n via init scripts)
+# - nats         (NATS + JetStream, monitoring :8222)
+# - n8n          (n8n orchestrator, DB: pxp_n8n)
+#
+# Prérequis:
+# - Ajouter deploy/caddy/Caddyfile (routes locales & headers sécu)
+# - Ajouter deploy/postgres/initdb/*.sql pour créer:
+#     - DB: pxp_app, pxp_n8n
+#     - Users: pxp_app_user, pxp_n8n_user (droits limités)
+# - (Optionnel) deploy/nats/nats.conf pour accounts/ACL JetStream
+#
+# Hostnames attendus:
+#   http://dev.localhost        → Nuxt (via Caddy)
+#   http://api.dev.localhost    → Django (via Caddy)
+#   http://n8n.dev.localhost    → n8n (via Caddy)
+#   http://nats.dev.localhost   → NATS monitoring (via Caddy ou 8222 direct)
+#
+# Notes:
+# - Images pinnées par tag stable. Pour prod ultérieure: idéalement par digest.
+# - Réseau local uniquement; secrets d’app non requis ici.
+# - Pour TLS local: ajouter mkcert/ACME dans le Caddyfile (optionnel).
+#
+# Image digests & labels (documentation)
+# - En production, pinner les images par digest (@sha256) pour éviter le drift.
+# - Ajouter des labels OCI pour tracer la source et le digest utilisé.
+# - En dev local (Sprint 0), on peut rester sur des tags, mais documenter le digest cible.
+#
+# Exemple (pin digest + labels) :
+#   services:
+#     backend:
+#       image: python:3.13-slim@sha256:<digest>
+#       labels:
+#         - "org.opencontainers.image.title=pxp_backend"
+#         - "org.opencontainers.image.source=https://github.com/pixelprowlers/studio"
+#         - "org.opencontainers.image.revision=<git_sha>"
+#         - "org.opencontainers.image.version=0.1.0"
+#         - "org.opencontainers.image.description=Django/DRF dev server"
+#         - "pxp.image.digest=python:3.13-slim@sha256:<digest>"
+#
+# Récupérer un digest:
+#   docker pull python:3.13-slim
+#   docker inspect --format='{{index .RepoDigests 0}}' python:3.13-slim
+#
+# Remarque:
+# - Pour un verrouillage total, préférez l’usage du digest dans "image:" ET consignez-le en label.
+# - Pour les images internes, publiez avec labels OCI (source, revision, licenses, etc.).
+
+services:
+  caddy:
+    image: caddy:2.8.4-alpine
+    container_name: pxp_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443" # TLS local (mkcert)
+    environment:
+      # Upstreams (utilisés par le Caddyfile via {$VAR})
+      NUXT_UPSTREAM: http://frontend:3000
+      DJANGO_UPSTREAM: http://backend:8000
+      N8N_UPSTREAM: http://n8n:5678
+      NATS_MONITORING: http://nats:8222
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/certs:/etc/caddy/certs:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+      - n8n
+      - nats
+    networks:
+      - pxp_net
+
+  frontend:
+    image: node:22-alpine
+    container_name: pxp_frontend
+    working_dir: /app/frontend
+    command: sh -c "npm install && npm run dev -- --port 3000 --host 0.0.0.0"
+    environment:
+      # Nuxt runtime config
+      NUXT_HOST: 0.0.0.0
+      NUXT_PORT: 3000
+      NUXT_DJANGO_BASE_URL: http://backend:8000
+      NUXT_PUBLIC_DJANGO_BASE_URL: http://api.dev.localhost
+    volumes:
+      - ../frontend:/app/frontend:rw
+    expose:
+      - "3000"
+    networks:
+      - pxp_net
+
+  backend:
+    image: python:3.13-slim
+    container_name: pxp_backend
+    working_dir: /app/backend
+    environment:
+      NATS_URL: nats://nats:4222
+      DJANGO_SETTINGS_MODULE: studio_core.settings.dev
+      DJANGO_ALLOWED_HOSTS: ".dev.localhost,localhost,127.0.0.1,backend"
+      DJANGO_CSRF_TRUSTED_ORIGINS: "https://*.dev.localhost,http://*.dev.localhost"
+      DATABASE_URL: postgresql://pxp_app_user:pxp_app_pass@postgres:5432/pxp_app
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    command: >
+      sh -c "
+        python -m pip install --disable-pip-version-check --upgrade pip &&
+        pip install poetry &&
+        poetry install &&
+        poetry run python manage.py migrate &&
+        poetry run python manage.py runserver 0.0.0.0:8000
+      "
+    volumes:
+      - ../backend:/app/backend:rw
+    expose:
+      - "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pxp_net
+
+  backend_consumer:
+    image: python:3.13-slim
+    container_name: pxp_backend_consumer
+    working_dir: /app/backend
+    environment:
+      DJANGO_SETTINGS_MODULE: studio_core.settings.dev
+      DJANGO_ALLOWED_HOSTS: ".dev.localhost,localhost,127.0.0.1,backend"
+      DJANGO_CSRF_TRUSTED_ORIGINS: "https://*.dev.localhost,http://*.dev.localhost"
+      DATABASE_URL: postgresql://pxp_app_user:pxp_app_pass@postgres:5432/pxp_app
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    command: >
+      sh -c "
+        python -m pip install --disable-pip-version-check --upgrade pip &&
+        pip install poetry &&
+        poetry install &&
+        poetry run python manage.py migrate &&
+        poetry run python manage.py events_consumer
+      "
+    volumes:
+      - ../backend:/app/backend:rw
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_started
+    networks:
+      - pxp_net
+
+  postgres:
+    image: postgres:17.0-alpine
+    container_name: pxp_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      # POSTGRES_DB: postgres  # DB par défaut; pxp_app/pxp_n8n via init scripts
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d postgres -h 127.0.0.1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    expose:
+      - "5432"
+    networks:
+      - pxp_net
+
+  nats:
+    image: nats:2.10.8-alpine
+    container_name: pxp_nats
+    command: ["-js", "-m", "8222", "-c", "/etc/nats/nats.conf"] # JetStream + monitoring + config
+    volumes:
+      - ./nats/nats.conf:/etc/nats/nats.conf:ro
+      - nats_store:/data/nats # Persistence JetStream
+    ports:
+      - "4222:4222" # client
+      - "8222:8222" # monitoring (HTTP)
+    networks:
+      - pxp_net
+
+  n8n:
+    image: n8nio/n8n:1.72.0
+    container_name: pxp_n8n
+    restart: unless-stopped
+    environment:
+      N8N_HOST: n8n.dev.localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: pxp_n8n
+      DB_POSTGRESDB_USER: pxp_n8n_user
+      DB_POSTGRESDB_PASSWORD: pxp_n8n_pass
+      # N8N_BASIC_AUTH_ACTIVE: "true"
+      # N8N_BASIC_AUTH_USER: "admin"
+      # N8N_BASIC_AUTH_PASSWORD: "admin"
+      N8N_EVENTS_GATEWAY_URL: http://backend:8000/api/events
+      N8N_EVENTS_HMAC_SECRET_FILE: /run/secrets/n8n_hmac_secret
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - n8n_local:/files
+    expose:
+      - "5678"
+    secrets:
+      - n8n_hmac_secret
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pxp_net
+
+networks:
+  pxp_net:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pgdata:
+  n8n_data:
+  n8n_local:
+  nats_store:
+
+secrets:
+  n8n_hmac_secret:
+    file: ../ops/secret/dev/events_gateway.hmac.key.dec

@@ -1,0 +1,248 @@
+# PixelProwlers Studio — Caddyfile (templates Realms + mTLS + forward_auth + CrowdSec)
+#
+# This Caddyfile defines three isolated “realms” front doors:
+# - dojo.pixelprowlers.studio     (Admins)         → mTLS required + forward_auth (optional)
+# - clients.pixelprowlers.studio  (Accredited)    → Turnstile/forward_auth optional
+# - laby.pixelprowlers.studio     (Honeypot)      → plausible façade, no prod impact
+#
+# Notes
+# - CrowdSec bouncer and forward_auth require Caddy plugins (build with xcaddy).
+# - Replace upstream placeholders with your actual service addresses or set env vars.
+# - Keep security headers consistent across realms (CSP may differ per frontend/backend).
+#
+# Build (example)
+#   xcaddy build \
+#     --with github.com/crowdsecurity/caddy-crowdsec-bouncer@latest \
+#     --with github.com/greenpau/caddy-auth-portal@latest \
+#     --with github.com/greenpau/caddy-auth-jwt@latest \
+#     --with github.com/greenpau/caddy-authorize@latest \
+#     --with github.com/greenpau/caddy-security@latest \
+#     --with github.com/porech/caddy-maxmind-geolocation@latest
+#
+# Env (example)
+#   export DJANGO_DOJO_UPSTREAM="http://django-dojo:8000"
+#   export DJANGO_CLIENTS_UPSTREAM="http://django-clients:8000"
+#   export DJANGO_LABY_UPSTREAM="http://django-laby:8000"
+#   export NUXT_CLIENTS_UPSTREAM="http://nuxt-clients:3000"
+#   export NUXT_LABY_UPSTREAM="http://nuxt-laby:3000"
+#   export AUTH_GATEWAY_URL="http://auth-gateway.internal/verify"
+
+{
+  # Global options
+  # email           you@example.com
+  # auto_https      on
+  # debug
+  # Default timeouts, etc. can be tuned here if needed
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Reusable snippets
+# ──────────────────────────────────────────────────────────────────────────────
+
+(security_headers) {
+  # Remove Server header
+  header -Server
+
+  # Baseline hardening
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Frame-Options "DENY"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+
+    # Cross-origin protections (adjust per app needs)
+    Cross-Origin-Opener-Policy "same-origin"
+    Cross-Origin-Embedder-Policy "require-corp"
+    Cross-Origin-Resource-Policy "same-origin"
+
+    # Content Security Policy (starter; refine per realm/app)
+    # For SSR apps, consider nonce/sha256 strategies; report-only first in staging.
+    # For Nuxt (frontend realms), you may set CSP from the app. This header acts as a fallback.
+    # CSP: connect-src now allows 'self' (covers /_fa/verify) and Cloudflare Turnstile
+    # Note: if you load Turnstile JS, consider adding https://challenges.cloudflare.com to script-src as well.
+    Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https://challenges.cloudflare.com; frame-ancestors 'none'"
+    Permissions-Policy "geolocation=(), camera=(), microphone=(), usb=(), payment=(), interest-cohort=()"
+
+    # Reporting endpoint (optional; proxy to backend /api/csp-report)
+    # Report-To "{\"group\":\"csp-endpoint\",\"max_age\":10886400,\"endpoints\":[{\"url\":\"/api/csp-report\"}]}"
+  }
+}
+
+# Optional: CrowdSec bouncer (requires plugin)
+# Usage: place `crowdsec` inside a route/handle to evaluate requests upstream of backends.
+(crowdsec_enforce) {
+  crowdsec
+}
+
+# Optional: forward_auth (requires a compatible plugin)
+# For example, an auth gateway issuing 2xx if allowed, or 302/401 if not.
+(forward_auth_gateway) {
+  @all {
+    path *
+  }
+  forward_auth {$AUTH_GATEWAY_URL} {
+    # Choose headers to forward from the auth gateway
+    copy_headers X-User X-Email X-Groups Authorization
+  }
+}
+
+# Default encoders (modern)
+(encoders) {
+  encode zstd gzip
+}
+
+# Access logs in JSON (structured)
+(json_access_log) {
+  log {
+    output stdout
+    format json
+  }
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# DOJO (Admins) — mTLS + forward_auth + Django (realm: admins)
+# ──────────────────────────────────────────────────────────────────────────────
+# Strictest realm. Requires client certificate signed by private CA, then optional forward_auth.
+#
+# Upstream defaults:
+#   DJANGO_DOJO_UPSTREAM (env) or http://django-dojo:8000
+#
+dojo.pixelprowlers.studio {
+  import json_access_log
+  import encoders
+  import security_headers
+
+  # TLS: enable mutual TLS (client certificate required & verified)
+  tls {
+    # Server cert: automatic (ACME) by default, or pin custom certs
+    # cert_file /etc/caddy/dojo.crt
+    # key_file  /etc/caddy/dojo.key
+
+    client_auth {
+      mode require_and_verify
+      trusted_ca_cert_file /etc/caddy/ca_admin_clients.pem
+    }
+  }
+
+  @health path /health /ready
+  handle @health {
+    reverse_proxy {$DJANGO_DOJO_UPSTREAM}
+  }
+
+  route {
+    # Enforce CrowdSec decisions before reaching the app
+    import crowdsec_enforce
+
+    # Optional forward_auth (SSO/risk gateway)
+    import forward_auth_gateway
+
+    # All other traffic → Django (admins realm)
+    reverse_proxy {$DJANGO_DOJO_UPSTREAM}
+  }
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CLIENTS (Accredited) — Nuxt (web) + Django (api)
+# ──────────────────────────────────────────────────────────────────────────────
+# No mTLS here. Keep defenses at proxy and app levels. Optionally enable forward_auth.
+#
+# Upstreams defaults:
+#   NUXT_CLIENTS_UPSTREAM   (env) or http://nuxt-clients:3000
+#   DJANGO_CLIENTS_UPSTREAM (env) or http://django-clients:8000
+#
+clients.pixelprowlers.studio {
+  import json_access_log
+  import encoders
+  import security_headers
+
+  # Optional: forward_auth if you integrate with an SSO/risk scorer
+  # import forward_auth_gateway
+
+  # Health endpoints directly to API
+  @api_health path /api/health /api/ready
+  handle @api_health {
+    reverse_proxy {$DJANGO_CLIENTS_UPSTREAM}
+  }
+
+  # API fanout
+  @api path /api/* /graphql* /admin/*  # adjust matcher for API/GraphQL/Admin surfaces
+  handle @api {
+    reverse_proxy {$DJANGO_CLIENTS_UPSTREAM}
+  }
+
+  # CSP report collector (if emitted by frontend)
+  @csp_report {
+    method POST
+    path /api/csp-report
+  }
+  handle @csp_report {
+    reverse_proxy {$NUXT_CLIENTS_UPSTREAM}
+  }
+
+  # Web (Nuxt SSR/static)
+  handle {
+    reverse_proxy {$NUXT_CLIENTS_UPSTREAM}
+  }
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# LABY (Honeypot) — plausible façade, no prod impact
+# ──────────────────────────────────────────────────────────────────────────────
+# Route shapes mirror “Clients” but lead to isolated honeypot backends.
+#
+# Upstreams defaults:
+#   NUXT_LABY_UPSTREAM   (env) or http://nuxt-laby:3000
+#   DJANGO_LABY_UPSTREAM (env) or http://django-laby:8000
+#
+laby.pixelprowlers.studio {
+  import json_access_log
+  import encoders
+  import security_headers
+
+  # Do NOT add forward_auth or mTLS here; keep plausible, minimize fingerprinting.
+  # Keep CrowdSec bouncer to block obvious noise before honeypot.
+  import crowdsec_enforce
+
+  # Health probes (to honeypot API)
+  @api_health path /api/health /api/ready
+  handle @api_health {
+    reverse_proxy {$DJANGO_LABY_UPSTREAM}
+  }
+
+  # API façade
+  @api path /api/* /graphql* /admin/*
+  handle @api {
+    reverse_proxy {$DJANGO_LABY_UPSTREAM}
+  }
+
+  # CSP report endpoint (if the façade emits report-only CSP)
+  @csp_report {
+    method POST
+    path /api/csp-report
+  }
+  handle @csp_report {
+    reverse_proxy {$NUXT_LABY_UPSTREAM}
+  }
+
+  # Web façade (Nuxt honeypot)
+  handle {
+    reverse_proxy {$NUXT_LABY_UPSTREAM}
+  }
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Local/dev helpers (optional)
+# Uncomment and set hosts in /etc/hosts to test realms locally.
+# ──────────────────────────────────────────────────────────────────────────────
+# :443 {
+#   import json_access_log
+#   import encoders
+#   import security_headers
+#   # tls internal
+#   # @dojo header Host dojo.local.test
+#   # handle @dojo { reverse_proxy {$DJANGO_DOJO_UPSTREAM} }
+#   # @clients header Host clients.local.test
+#   # handle @clients { reverse_proxy {$NUXT_CLIENTS_UPSTREAM} }
+#   # @laby header Host laby.local.test
+#   # handle @laby { reverse_proxy {$NUXT_LABY_UPSTREAM} }
+# }

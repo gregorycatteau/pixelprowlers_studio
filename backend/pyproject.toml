@@ -26,6 +26,13 @@ drf-spectacular-sidecar = "*"
 jsonschema = "^4"
 celery = "^5"
 redis = "^5"
+argon2-cffi = "*"
+django-otp = "*"
+django-two-factor-auth = "*"
+django-allauth = "*"
+requests = "*"
+pyzipper = "*"
+pgpy = "*"
 
 [tool.poetry.group.dev.dependencies]
 django-debug-toolbar = "^4.4.6"

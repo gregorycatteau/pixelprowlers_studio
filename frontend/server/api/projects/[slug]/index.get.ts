@@ -1,6 +1,6 @@
 import type { H3Event } from 'h3'
-import type { ProjectResponse } from '~/shared/types/projects'
-import { djangoBase } from '~/server/utils/djangoBase'
+import type { ProjectResponse } from '~~/shared/types/projects'
+import { djangoBase } from '~~/server/utils/djangoBase'
 
 /**
  * Server route (SSR) — Get Project detail by slug
@@ -27,10 +27,13 @@ export default defineEventHandler(async (event: H3Event): Promise<ProjectRespons
   if (reqHeaders['x-csrftoken']) upstreamHeaders['x-csrftoken'] = reqHeaders['x-csrftoken']
 
   try {
-    const data = await $fetch<ProjectResponse>(`${base}/api/v1/projects/${encodeURIComponent(slug)}/`, {
-      method: 'GET',
-      headers: upstreamHeaders,
-    })
+    const data = await $fetch<ProjectResponse>(
+      `${base}/api/v1/projects/${encodeURIComponent(slug)}/`,
+      {
+        method: 'GET',
+        headers: upstreamHeaders,
+      },
+    )
     return data
   } catch (e: any) {
     throw createError({
