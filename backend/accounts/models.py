@@ -77,6 +77,11 @@ class AuditLog(models.Model):
 
     ip = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(blank=True, default="")
+    request_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
 
     def __str__(self) -> str:
-        return f"[{self.created_at.isoformat()}] {self.method} {self.path} {self.status_code} ({self.username})"
+        rid = f" rid={self.request_id}" if self.request_id else ""
+        return (
+            f"[{self.created_at.isoformat()}] {self.method} {self.path} "
+            f"{self.status_code}{rid} ({self.username})"
+        )

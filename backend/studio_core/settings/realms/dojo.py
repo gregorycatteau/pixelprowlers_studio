@@ -94,7 +94,7 @@ except Exception:
     pass
 
 # Cookies nommés par realm pour éviter collisions inter-origines
-SESSION_COOKIE_NAME = os.getenv("SESSION_COOKIE_NAME", "pp_dojo_sessionid")
+SESSION_COOKIE_NAME = os.getenv("SESSION_COOKIE_NAME", "__Host-pp_session")
 CSRF_COOKIE_NAME = os.getenv("CSRF_COOKIE_NAME", "pp_dojo_csrftoken")
 
 

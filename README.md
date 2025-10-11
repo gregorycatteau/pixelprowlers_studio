@@ -15,18 +15,38 @@ Monorepo Nuxt 4 + Tailwind 4 (frontend) et Django (Poetry) + PostgreSQL/SQLite (
 - Poetry (gestion des dépendances Python)
 - npm (gestion des dépendances frontend)
 
-## Démarrer (dev)
+## Démarrage DEV (PostgreSQL local 5432)
 
-Frontend (Nuxt 4)
-    cd frontend
-    npm ci
-    npm run dev
+- `make dev-env`
+- `make redis-up` (si Redis 6379 n’est pas déjà lancé)
+- `./scripts/dev-check.sh`
+- `poetry install --with dev --directory backend`
+- `npm install --prefix frontend`
+- `make init-dev`
+- `make dev` → backend: http://localhost:8000 · frontend: http://localhost:3000
+- Identifiants dev : **striker / Ide33480/(12)** (usage local uniquement)
+  (`npm run dev:bootstrap` reste réservé aux scénarios E2E isolés : purge conversations/messages)
 
-Backend (Django)
-    cd backend
-    poetry install
-    poetry run python manage.py migrate
-    poetry run python manage.py runserver 0.0.0.0:8000
+### Run now (résumé express)
+
+1. `make dev-env`
+2. `./scripts/dev-check.sh`
+3. `poetry install --with dev --directory backend`
+4. `npm install --prefix frontend`
+5. `APP_ENV=dev poetry run python manage.py init_dev_env`
+6. `make dev`
+7. Dans un autre terminal : exécuter les smokes `docs/auth/smoke-dojo.http` (HTTPie)
+   ```
+   cd docs/auth
+   bash smoke-dojo.http
+   ```
+8. `make smoke` (raccourci pour relancer les smokes)
+
+👉 En développement, la CSP est automatiquement assouplie (`'unsafe-inline'`, `'unsafe-eval'`, `ws://localhost:5173`) pour laisser Vite HMR fonctionner. En production, la politique reste stricte (pas d'unsafe, pas de websocket arbitraire).
+
+### API utiles
+
+- `GET /api/auth/me/` — renvoie les informations essentielles de l'utilisateur courant (session ou JWT obligatoire).
 
 ## Scripts utiles
 
@@ -35,6 +55,7 @@ Frontend
 - Typecheck: npm run typecheck
 - Stylelint: npm run stylelint
 - Build: npm run build
+- Tests E2E: npm run test:e2e
 
 Backend
 - Migrations: poetry run python manage.py makemigrations

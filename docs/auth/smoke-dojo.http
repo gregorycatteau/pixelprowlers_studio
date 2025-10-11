@@ -1,0 +1,80 @@
+# Smoke test Dojo (session + CSRF + nonce)
+# Pré-requis : httpie (>=3.0) et jq.
+# Variables suggérées : export BASE_URL="http://localhost:8000"
+
+### 1) Pré-déposer un CSRF token (double-submit cookie)
+# (stocké dans la session httpie `dojo` + récupéré via jq)
+http --session dojo GET :${BASE_URL}/api/auth/csrf/
+CSRFTOKEN=$(http --session dojo GET :${BASE_URL}/api/auth/csrf/ | jq -r '.csrf')
+
+### 2) Login superuser (remplacer <user> / <pass>)
+http --session dojo POST :${BASE_URL}/api/auth/login/ \
+  X-CSRFToken:$CSRFTOKEN \
+  username=<user> \
+  password=<pass> \
+  --json
+
+### 3) Vérifier la session / permissions
+http --session dojo GET :${BASE_URL}/api/auth/me/
+
+### 4) Obtenir un nonce signé (TTL 60 s, usage unique)
+NONCE=$(http --session dojo POST :${BASE_URL}/api/auth/nonce/ \
+  X-CSRFToken:$CSRFTOKEN | jq -r '.nonce')
+
+### 5) Créer une conversation Dojo (slug agent actif requis)
+CONV=$(http --session dojo POST :${BASE_URL}/api/conversations/ \
+  X-CSRFToken:$CSRFTOKEN \
+  X-Request-Nonce:$NONCE \
+  agent=claire \
+  title="Smoke QA" \
+  --json)
+CONV_ID=$(echo "$CONV" | jq -r '.id')
+
+### 6) Poster un message (récupère un nouveau nonce avant mutation)
+NONCE=$(http --session dojo POST :${BASE_URL}/api/auth/nonce/ \
+  X-CSRFToken:$CSRFTOKEN | jq -r '.nonce')
+http --session dojo POST :${BASE_URL}/api/messages/ \
+  X-CSRFToken:$CSRFTOKEN \
+  X-Request-Nonce:$NONCE \
+  conversation=$CONV_ID \
+  content="Bonjour Dojo" \
+  --json
+
+### 7) Rejouer le même nonce (attendu erreur nonce_replay)
+http --session dojo POST :${BASE_URL}/api/messages/ \
+  X-CSRFToken:$CSRFTOKEN \
+  X-Request-Nonce:$NONCE \
+  conversation=$CONV_ID \
+  content="Rejeu interdit" \
+  --json
+
+### 8) Consulter l'historique (pagination 50 msgs/page)
+http --session dojo GET :${BASE_URL}/api/messages/ conversation==$CONV_ID
+
+### 9) Archiver la conversation (soft-delete)
+NONCE=$(http --session dojo POST :${BASE_URL}/api/auth/nonce/ \
+  X-CSRFToken:$CSRFTOKEN | jq -r '.nonce')
+http --session dojo DELETE :${BASE_URL}/api/conversations/$CONV_ID/ \
+  X-CSRFToken:$CSRFTOKEN \
+  X-Request-Nonce:$NONCE
+
+### 10) Vérifier la protection CSRF (attendu 403)
+NONCE=$(http --session dojo POST :${BASE_URL}/api/auth/nonce/ \
+  X-CSRFToken:$CSRFTOKEN | jq -r '.nonce')
+http --session dojo POST :${BASE_URL}/api/messages/ \
+  X-Request-Nonce:$NONCE \
+  conversation=$CONV_ID \
+  content="Tentative sans CSRF" \
+  --json
+
+### 11) Déclencher le throttling gate (absurdity-check rate-limit)
+for i in 1 2 3 4 5 6; do \
+  http --session dojo POST :${BASE_URL}/api/gates/absurdity-check \
+    X-CSRFToken:$CSRFTOKEN \
+    X-Request-Nonce:$(http --session dojo POST :${BASE_URL}/api/auth/nonce/ X-CSRFToken:$CSRFTOKEN | jq -r '.nonce') \
+    text="tentative invalide"; \
+done
+
+### 12) Logout
+http --session dojo POST :${BASE_URL}/api/auth/logout/ \
+  X-CSRFToken:$CSRFTOKEN

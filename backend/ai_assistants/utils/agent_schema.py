@@ -617,3 +617,35 @@ def main_cli(argv: List[str]) -> int:
 
 if __name__ == "__main__":  # pragma: no cover
     sys.exit(main_cli(sys.argv))
+
+# --- Backward-compat alias for legacy imports ---
+AGENT_SCHEMA = AGENT_PROFILE_SCHEMA_V21
+
+# --- Legacy compatibility schema (accept legacy top-level fields) ---------------------
+LEGACY_AGENT_SCHEMA = {
+    "type": "object",
+    "required": ["name", "model", "instructions", "tools"],
+    "additionalProperties": True,
+    "properties": {
+        "name": {"type": "string"},
+        "description": {"type": "string"},
+        "model": {"type": "string"},
+        "temperature": {"type": "number"},
+        "instructions": {"type": "string"},
+        "tools": {"type": "array"},
+        "security_protocol": {"type": "object"},
+        "context_enrichment": {"type": "object"},
+        "integrations": {"type": "object"},
+        "learning_protocol": {"type": "object"},
+        "communication_style": {"type": "object"},
+        "collaboration_protocol": {"type": "object"},
+    },
+}
+
+# Redéfinition d'AGENT_SCHEMA pour accepter v2.1 OU legacy
+AGENT_SCHEMA = {
+    "anyOf": [
+        AGENT_PROFILE_SCHEMA_V21,  # schéma strict v2.1
+        LEGACY_AGENT_SCHEMA,  # compat héritée (OpenAI Assistants-like)
+    ]
+}

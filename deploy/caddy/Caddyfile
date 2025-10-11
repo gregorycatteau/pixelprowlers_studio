@@ -45,14 +45,14 @@
     # Baseline hardening
     X-Content-Type-Options "nosniff"
     X-Frame-Options "DENY"
-    Referrer-Policy "strict-origin-when-cross-origin"
+    Referrer-Policy "no-referrer"
+    Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), microphone=()"
+    Cross-Origin-Opener-Policy "same-origin"
+    Cross-Origin-Embedder-Policy "same-origin"
 
-    # Content Security Policy (Report-Only for local)
-    # Adjust per app and evolve to "enforce" once stable.
-    Content-Security-Policy-Report-Only "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
-
-    # Optional report endpoint (implement /api/csp-report on your app if desired)
-    # Report-To "{\"group\":\"csp-endpoint\",\"max_age\":10886400,\"endpoints\":[{\"url\":\"/api/csp-report\"}]}"
+    # Content Security Policy en mode "enforce"
+    Content-Security-Policy "default-src 'self'; connect-src 'self' https: ws:; img-src 'self' data: blob:; style-src 'self'; script-src 'self' 'strict-dynamic'; base-uri 'self'; frame-ancestors 'none'; report-uri /api/csp-report; report-to csp-endpoint"
+    Report-To "{\"group\":\"csp-endpoint\",\"max_age\":10886400,\"endpoints\":[{\"url\":\"/api/csp-report\"}]}"
 
     # Note: HSTS is meaningful over HTTPS; keep commented in local HTTP.
     # Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"

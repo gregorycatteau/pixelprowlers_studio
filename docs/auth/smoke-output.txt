@@ -1,0 +1,15 @@
+Smoke HTTPie non exécuté automatiquement (PostgreSQL/Redis non disponibles dans cet environnement).
+Lancer manuellement après `make dev` :
+
+  cd docs/auth
+  bash smoke-dojo.http > smoke-output_local.txt
+
+Le fichier `smoke-output_local.txt` résultant doit contenir :
+  - `GET /api/auth/csrf/` → 200 + champ `csrf`
+  - `POST /api/auth/login/` → 200 `{ "ok": true }`
+  - `GET /api/auth/me/` → 200 `{ "ok": true, "user": {...} }`
+  - `GET /api/agents/` → liste non vide
+  - `POST /api/auth/nonce/` → nonce retourné
+  - `POST /api/conversations/` → 201 avec `id`
+  - `POST /api/messages/` → 201 avec `content`
+  - `GET /api/messages/?conversation=...` → tableau ≥ 1 item

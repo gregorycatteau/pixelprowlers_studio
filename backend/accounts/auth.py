@@ -742,7 +742,7 @@ def api_auth_totp_activate(request):
 @ratelimit(key="ip", rate="5/m", block=True)
 @ratelimit(key="post:email", rate="10/h", block=True)
 @require_POST
-@csrf_exempt
+@csrf_protect
 def api_auth_login(request):
     """
     POST /api/auth/login/
@@ -916,7 +916,17 @@ def api_auth_totp_verify(request):
     except Exception:
         pass
 
-    return _issue_jwt_response(request, user)
+    resp = _issue_jwt_response(request, user)
+    # Set realm cookie for Dojo (admin realm)
+    resp.set_cookie(
+        "__Host-pp_realm",
+        "A",
+        httponly=True,
+        secure=bool(getattr(settings, "SESSION_COOKIE_SECURE", False)),
+        samesite="Strict",
+        path="/",
+    )
+    return resp
 
 
 def _hash_recovery_code(user, code: str) -> str:

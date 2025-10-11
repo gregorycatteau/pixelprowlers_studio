@@ -493,6 +493,123 @@ class JaredLog(models.Model):
         return f"JaredLog<{first_chars(self.message, 48)}>"
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Dojo Conversations (S0C)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class DojoAgent(models.Model):
+    slug = models.SlugField(unique=True)
+    title = models.CharField(max_length=160)
+    description = models.TextField(blank=True, default="")
+    capabilities = models.JSONField(default=dict, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Agent Dojo"
+        verbose_name_plural = "Agents Dojo"
+        ordering = ["slug"]
+
+    def __str__(self) -> str:
+        return f"{self.slug}"
+
+
+class Conversation(models.Model):
+    STATUS_OPEN = "open"
+    STATUS_CLOSED = "closed"
+    STATUS_ARCHIVED = "archived"
+    STATUS_CHOICES = (
+        (STATUS_OPEN, "Ouverte"),
+        (STATUS_CLOSED, "Fermée"),
+        (STATUS_ARCHIVED, "Archivée"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title = models.CharField(max_length=160, blank=True, default="")
+    agent = models.ForeignKey(DojoAgent, on_delete=models.PROTECT, related_name="conversations")
+    creator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="dojo_conversations",
+    )
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_OPEN)
+    meta = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Conversation Dojo"
+        verbose_name_plural = "Conversations Dojo"
+        indexes = [
+            models.Index(fields=["creator", "created_at"]),
+            models.Index(fields=["agent", "status"]),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Conversation<{self.id}>"
+
+
+class ConversationMessage(models.Model):
+    ROLE_USER = "user"
+    ROLE_AGENT = "agent"
+    ROLE_SYSTEM = "system"
+    ROLE_CHOICES = (
+        (ROLE_USER, "Admin"),
+        (ROLE_AGENT, "Agent"),
+        (ROLE_SYSTEM, "Système"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    conversation = models.ForeignKey(
+        Conversation, on_delete=models.CASCADE, related_name="messages"
+    )
+    role = models.CharField(max_length=16, choices=ROLE_CHOICES)
+    content = models.TextField()
+    tokens = models.PositiveIntegerField(null=True, blank=True)
+    meta = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Message de conversation"
+        verbose_name_plural = "Messages de conversation"
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["conversation", "created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"Message<{self.id}>"
+
+
+class ConversationAuditLog(models.Model):
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL
+    )
+    action = models.CharField(max_length=64)
+    object_type = models.CharField(max_length=64)
+    object_id = models.CharField(max_length=64)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=512, blank=True, default="")
+    request_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    extra = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Audit conversation"
+        verbose_name_plural = "Audits conversation"
+        indexes = [
+            models.Index(fields=["action", "created_at"]),
+            models.Index(fields=["object_type", "object_id"]),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Audit<{self.action}:{self.object_type}#{self.object_id}>"
+
+
 class UserSecurityProfile(models.Model):
     """
     Stocke les secrets "préflight" d’un utilisateur (superuser de confiance).

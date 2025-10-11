@@ -1,0 +1,11 @@
+- [x] Migrations Django appliquées sur `postgresql://pxp_app_user:pxp_app_pass@127.0.0.1:5544/pxp_app`.
+- [x] `manage.py import_agents --dir agents_v21` exécuté (16 agents actifs).
+- [x] `GET /api/agents/` retourne la liste complète (16) avec session gate validée.
+- [x] `POST /api/agents/bruce/ask` répond `ok: true` (echo mock).
+- [x] `print_db_config` affiche la cible et `SELECT version()` passe.
+- [x] Throttle `ask_agent` actif (`5/min`) — 6ᵉ requête → `429`.
+- [x] Headers sécu (`nosniff`, `no-referrer`, COOP/COEP, Permissions-Policy) présents.
+- [x] Logs d'ask redacted (hash SHA256, aucun email/token en clair).
+- [x] Superuser temporaire `ops_admin` désactivé/supprimé (`cleanup_ops_admin`).
+- [x] `APP_ENV=test PYTHONPATH=backend poetry run pytest -m agents` exécuté.
+- [x] Aucun secret sensible ajouté/commité (clé OpenAI toujours factice).

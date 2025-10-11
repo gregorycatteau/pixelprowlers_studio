@@ -31,9 +31,13 @@ Addendum — Incrément 4 “Finitions Sécu + Pages Nuxt + Preuves CI/CD”
   - Commande: python manage.py purge_old_events --days 90 [--jsonl PATH] [--backup-dir DIR] [--gzip] [--dry-run]
   - Purge les entrées JSONL antérieures au cutoff; sauvegarde optionnelle des lignes purgées; le chaînage hash reste vérifiable via les scellés historiques.
 - CSP “enforce” et rapports
-  - CSP active côté proxy (Caddy) et/ou app; connect-src: 'self' https://challenges.cloudflare.com /_fa/verify /api/*
-  - Endpoint de rapports actif: /api/csp-report. Passage en enforce après ≥ 48 h sans violations en staging.
-  - Attendu tests: aucune violation sur pages index/console/dashboard.
+  - Politique alignée: `default-src 'self'; connect-src 'self' https: ws:; img-src 'self' data: blob:; style-src 'self'; script-src 'self' 'strict-dynamic'; base-uri 'self'; frame-ancestors 'none'; report-uri /api/csp-report`.
+  - `Report-To` vers `/api/csp-report`; observabilité via logs JSON + Sentry.
+  - Attendu tests: Playwright + smoke script (docs/auth/smoke-dojo.http) sans violation CSP.
+- Observabilité corrélée
+  - Logs JSON (frontend/backend) enrichis du `request_id`.
+  - `AuditLog.request_id` + métriques Prometheus (`dojo_*`) + Sentry (front/back) pour les incidents.
+  - Runbooks: `docs/ops/runbook_csp.md`, `docs/ops/runbook_incidents.md`.
 - mTLS harness (Dojo)
   - Scénarios à valider: cert client valide → 2xx Dojo; cert invalide/absent → rejet par le proxy (4xx) avant Django.
   - Fournir cible docker-compose / make pour lancer Caddy avec mTLS (certs de test).
@@ -48,6 +52,7 @@ Addendum — Incrément 4 “Finitions Sécu + Pages Nuxt + Preuves CI/CD”
     - Rapports JUnit + couverture publiés en artefacts.
     - Captures E2E (succès/échec) attachées.
     - Checks de conformité: CSP enforce (aucune violation), mTLS harness (2 comportements), JWKS exposé, cookies __Host- présents.
+  - Nouvelle workflow GitHub : `.github/workflows/ci_dojo.yml` (pytest + Playwright).
   - Publication (préprod): hash scellé du jour inclus en artefact si présent.
 
 

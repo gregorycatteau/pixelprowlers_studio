@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # -----------------------------------------------------------------------------
-# pg_setup_17.sh — Provision PostgreSQL 17 (port 5434) pour PixelProwlers
+# pg_setup_17.sh — Provision PostgreSQL 17 (port 5432) pour PixelProwlers
 # Corrigé : CREATE DATABASE hors transaction (pas de DO $$ ... $$)
 # -----------------------------------------------------------------------------
 set -Eeuo pipefail
 
 PG_VER="17"
 PG_CLUSTER="main"
-PG_PORT="5434"
+PG_PORT="5432"
 PG_HOST="127.0.0.1"
 
 # ⚠️ Modifie ces mdp (local/dev uniquement)

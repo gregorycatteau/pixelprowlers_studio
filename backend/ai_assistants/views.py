@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
+from hashlib import sha256
+from types import SimpleNamespace
 from typing import Any, Dict, Optional
 
 from django.contrib.auth import authenticate, login, logout
@@ -15,8 +18,10 @@ from django.shortcuts import render
 from django.utils.text import slugify
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_GET, require_POST
+from rest_framework.throttling import ScopedRateThrottle
 
 from .models import AgentProfile
+from .security import NonceError, RequestNonce, issue_chained_nonce
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 🔐 GATE: constantes & anti-bruteforce
@@ -35,6 +40,12 @@ ABSURD_TRIGGERS = [
 
 FAIL_WINDOW_SECONDS = 15 * 60
 MAX_FAILS = 6
+ASK_LOGGER = logging.getLogger("ai_assistants.ask")
+MAX_MESSAGE_LENGTH = 4000
+
+
+class AskAgentThrottle(ScopedRateThrottle):
+    scope = "ask_agent"
 
 
 def _fail_key(request: HttpRequest, stage: str) -> str:
@@ -94,14 +105,14 @@ def _agent_summary(agent: AgentProfile) -> Dict[str, Any]:
 
 def _get_agent_by_slug_or_name(slug: str) -> Optional[AgentProfile]:
     try:
-        return AgentProfile.objects.filter(is_enabled=True).get(slug=slug)
+        return AgentProfile.objects.filter(is_active=True).get(slug=slug)
     except Exception:
         pass
     try:
-        return AgentProfile.objects.filter(is_enabled=True).get(name__iexact=slug)
+        return AgentProfile.objects.filter(is_active=True).get(name__iexact=slug)
     except AgentProfile.DoesNotExist:
         pass
-    for a in AgentProfile.objects.filter(is_enabled=True):
+    for a in AgentProfile.objects.filter(is_active=True):
         if slugify(a.name) == slug:
             return a
     return None
@@ -180,6 +191,29 @@ def api_auth_whoami(request: HttpRequest) -> JsonResponse:
         },
         status=200,
     )
+
+
+@require_POST
+@login_required
+@user_passes_test(_is_superuser)
+@csrf_protect
+def api_auth_nonce(request: HttpRequest) -> JsonResponse:
+    """
+    POST /api/auth/nonce/
+    Returns a short-lived nonce (TTL 60s) for chaining protected mutations.
+    """
+    user_id = getattr(request.user, "pk", None)
+    nonce = RequestNonce.generate(user_id=user_id)
+    response = JsonResponse(
+        {"ok": True, "nonce": str(nonce), "expires_in": RequestNonce.ttl_seconds},
+        status=200,
+    )
+    response["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response["Pragma"] = "no-cache"
+    response["Expires"] = "0"
+    # Provide an eager follow-up nonce to avoid waterfall calls (optional)
+    issue_chained_nonce(response, user_id=user_id)
+    return response
 
 
 @require_POST
@@ -363,7 +397,7 @@ def api_list_agents(request: HttpRequest) -> JsonResponse:
     GET /api/agents/
     Renvoie un TABLEAU ([]) pour matcher le proxy Nuxt.
     """
-    qs = AgentProfile.objects.filter(is_enabled=True).order_by("name")
+    qs = AgentProfile.objects.filter(is_active=True).order_by("name")
     agents = [_agent_summary(a) for a in qs]
     return JsonResponse({"agents": agents}, status=200)
 
@@ -378,6 +412,21 @@ def api_ask_agent(request: HttpRequest, slug: str) -> JsonResponse:
     Body: { "message": "..." }
     Pour l’instant → MOCK (echo).
     """
+    throttle = AskAgentThrottle()
+    throttle_view = SimpleNamespace(throttle_scope=AskAgentThrottle.scope)
+    if not throttle.allow_request(request, throttle_view):
+        wait = throttle.wait()
+        return JsonResponse(
+            {"ok": False, "agent": slug, "error": "rate_limited", "retry_after": wait},
+            status=429,
+        )
+
+    raw_nonce = request.headers.get("X-Request-Nonce") or request.META.get("HTTP_X_REQUEST_NONCE")
+    try:
+        RequestNonce.validate(raw_nonce, getattr(request.user, "pk", None))
+    except NonceError as exc:
+        return JsonResponse({"ok": False, "agent": slug, "error": exc.code}, status=400)
+
     agent = _get_agent_by_slug_or_name(slug)
     if not agent:
         return JsonResponse({"ok": False, "agent": slug, "error": "Agent introuvable."}, status=404)
@@ -390,10 +439,23 @@ def api_ask_agent(request: HttpRequest, slug: str) -> JsonResponse:
     message = (data.get("message") or "").strip()
     if not message:
         return JsonResponse({"ok": False, "agent": slug, "error": "Message requis."}, status=400)
+    if len(message) > MAX_MESSAGE_LENGTH:
+        return JsonResponse(
+            {"ok": False, "agent": slug, "error": "message_too_long", "limit": MAX_MESSAGE_LENGTH},
+            status=400,
+        )
 
     t0 = time.time()
     output = f"[{agent.name}] Echo sécurisé : {message}"
     latency_ms = int((time.time() - t0) * 1000)
+
+    message_hash = sha256(message.encode("utf-8")).hexdigest()
+    ASK_LOGGER.info(
+        "ask_agent slug=%s message_hash=%s tokens_in=%d",
+        agent.slug or slugify(agent.name),
+        message_hash,
+        len(message.split()),
+    )
 
     resp = {
         "ok": True,
@@ -418,7 +480,7 @@ def api_ask_agent(request: HttpRequest, slug: str) -> JsonResponse:
 @user_passes_test(_is_superuser)
 def ask_agent_view(request: HttpRequest, agent_name: str | None = None) -> HttpResponse:
     response_text = ""
-    agents_queryset = AgentProfile.objects.filter(is_enabled=True).order_by("name")
+    agents_queryset = AgentProfile.objects.filter(is_active=True).order_by("name")
     selected_agent_name = (agent_name or "").lower() if agent_name else None
 
     if request.method == "POST":

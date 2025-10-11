@@ -28,6 +28,30 @@ jobs:
   unit:
     name: Unit — Python + Frontend (SBOM & scans)
     runs-on: ubuntu-latest
+
+    # PostgreSQL service for Django tests
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d testdb"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+
+    env:
+      DJANGO_SETTINGS_MODULE: studio_core.settings.test
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/testdb
+      PYTHONUNBUFFERED: "1"
+      PYTHON_VERSION: ${{ env.PYTHON_VERSION }}
+      NODE_VERSION: ${{ env.NODE_VERSION }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,6 +78,24 @@ jobs:
       - name: Install backend deps
         working-directory: backend
         run: poetry install --no-interaction --no-ansi
+
+      - name: Wait for Postgres
+        working-directory: backend
+        run: |
+          poetry run python - <<'PY'
+          import os, time, psycopg
+          dsn = os.environ["DATABASE_URL"]
+          for i in range(60):
+              try:
+                  with psycopg.connect(dsn, connect_timeout=3) as conn:
+                      with conn.cursor() as cur:
+                          cur.execute("SELECT 1;")
+                          print("Postgres ready")
+                          raise SystemExit(0)
+              except Exception as e:
+                  time.sleep(1)
+          raise SystemExit("DB not ready after 60s")
+          PY
 
       - name: Pytest (coverage XML)
         working-directory: backend

@@ -1,13 +1,21 @@
 services:
   backend:
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    environment:
+      EVENTS_HMAC_SECRET_FILE: /run/ppw-secrets/events_gateway.hmac.key
+    volumes:
+      - type: bind
+        source: ../ops/secret/dev/events_gateway.hmac.key.dec
+        target: /run/ppw-secrets/events_gateway.hmac.key
+        read_only: true
 
   backend_consumer:
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  # Sanity check n8n
+    environment:
+      EVENTS_HMAC_SECRET_FILE: /run/ppw-secrets/events_gateway.hmac.key
+    volumes:
+      - type: bind
+        source: ../ops/secret/dev/events_gateway.hmac.key.dec
+        target: /run/ppw-secrets/events_gateway.hmac.key
+        read_only: true
   n8n:
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:5678/healthz"]
@@ -15,7 +23,6 @@ services:
       timeout: 3s
       retries: 5
 
-  # NATS Server + Monitoring (JetStream activé)
   nats:
     image: nats:2
     command: ["-js", "-m", "8222", "--http_port", "8222", "--server_name=pxp_nats"]

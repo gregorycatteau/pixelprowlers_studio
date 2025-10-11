@@ -36,13 +36,14 @@ Notes:
 from __future__ import annotations
 
 import threading
-from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Tuple
 
 __all__ = [
     "REGISTRY",
     "Registry",
     "Counter",
     "Gauge",
+    "Histogram",
 ]
 
 
@@ -72,6 +73,19 @@ def _normalize_label_tuple(
     if set(labels.keys()) != set(label_names):
         raise ValueError(f"Labels attendus: {label_names}, reçus: {tuple(labels.keys())}")
     return tuple(str(labels[name]) for name in label_names)
+
+
+def _format_labels(
+    label_names: Tuple[str, ...],
+    label_values: Tuple[str, ...],
+    extra: Optional[Mapping[str, Any]] = None,
+) -> str:
+    labels = {name: value for name, value in zip(label_names, label_values)}
+    if extra:
+        labels.update(extra)
+    if not labels:
+        return ""
+    return ",".join(f'{k}="{_escape_label_value(str(v))}"' for k, v in sorted(labels.items()))
 
 
 class _MetricBase:
@@ -157,6 +171,68 @@ class Gauge(_MetricBase):
         self._add(labels, -value)
 
 
+class Histogram(_MetricBase):
+    """Histogramme simple avec buckets fixes."""
+
+    def __init__(
+        self,
+        name: str,
+        help: str,
+        buckets: Iterable[float],
+        label_names: Iterable[str] = (),
+    ):
+        super().__init__(name, help, "histogram", label_names)
+        bucket_list = sorted(float(b) for b in buckets)
+        if not bucket_list:
+            raise ValueError("Au moins un bucket est requis.")
+        self.buckets: Tuple[float, ...] = tuple(bucket_list)
+        self._bucket_counts: MutableMapping[Tuple[str, ...], List[float]] = {}
+        self._sum: MutableMapping[Tuple[str, ...], float] = {}
+        self._count: MutableMapping[Tuple[str, ...], float] = {}
+
+    def observe(self, labels: Optional[Mapping[str, str]] = None, value: float = 0.0) -> None:
+        key = _normalize_label_tuple(self.label_names, labels)
+        v = float(value)
+        with self._lock:
+            counts = self._bucket_counts.setdefault(
+                key, [0.0 for _ in range(len(self.buckets) + 1)]
+            )
+            for idx, bound in enumerate(self.buckets):
+                if v <= bound:
+                    counts[idx] += 1.0
+            counts[-1] += 1.0  # +Inf bucket
+            self._sum[key] = self._sum.get(key, 0.0) + v
+            self._count[key] = self._count.get(key, 0.0) + 1.0
+
+    def _to_prometheus_lines(self) -> List[str]:
+        lines: List[str] = [
+            f"# HELP {self.name} {self.help}",
+            f"# TYPE {self.name} histogram",
+        ]
+        with self._lock:
+            items = sorted(self._bucket_counts.items(), key=lambda kv: kv[0])
+            for label_values, bucket_counts in items:
+                cumulative = 0.0
+                for idx, bound in enumerate(self.buckets):
+                    cumulative += bucket_counts[idx]
+                    labels_repr = _format_labels(self.label_names, label_values, {"le": bound})
+                    lines.append(f"{self.name}_bucket{{{labels_repr}}} {cumulative}")
+                cumulative += bucket_counts[-1]
+                labels_repr = _format_labels(self.label_names, label_values, {"le": "+Inf"})
+                lines.append(f"{self.name}_bucket{{{labels_repr}}} {cumulative}")
+
+                sum_labels = _format_labels(self.label_names, label_values)
+                count = self._count.get(label_values, 0.0)
+                total = self._sum.get(label_values, 0.0)
+                if sum_labels:
+                    lines.append(f"{self.name}_count{{{sum_labels}}} {count}")
+                    lines.append(f"{self.name}_sum{{{sum_labels}}} {total}")
+                else:
+                    lines.append(f"{self.name}_count {count}")
+                    lines.append(f"{self.name}_sum {total}")
+        return lines
+
+
 class Registry:
     """
     Registre de métriques thread‑safe.
@@ -196,6 +272,32 @@ class Registry:
             if tuple(label_names) != m.label_names:
                 raise ValueError(
                     f"Label set différent pour '{name}': déclaré={m.label_names}, demandé={tuple(label_names)}"
+                )
+            return m  # type: ignore[return-value]
+
+    def histogram(
+        self,
+        name: str,
+        help: str,
+        *,
+        buckets: Iterable[float],
+        label_names: Iterable[str] = (),
+    ) -> Histogram:
+        with self._lock:
+            m = self._metrics.get(name)
+            if m is None:
+                h = Histogram(name, help, buckets, label_names)
+                self._metrics[name] = h
+                return h
+            if not isinstance(m, Histogram):
+                raise TypeError(f"La métrique '{name}' existe déjà avec un autre type.")
+            if tuple(label_names) != m.label_names:
+                raise ValueError(
+                    f"Label set différent pour '{name}': déclaré={m.label_names}, demandé={tuple(label_names)}"
+                )
+            if tuple(sorted(float(b) for b in buckets)) != m.buckets:
+                raise ValueError(
+                    f"Buckets différents pour '{name}' : déclaré={m.buckets}, demandé={tuple(sorted(float(b) for b in buckets))}"
                 )
             return m  # type: ignore[return-value]
 

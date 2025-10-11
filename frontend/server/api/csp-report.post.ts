@@ -11,6 +11,7 @@
  * Route: POST /api/csp-report
  */
 
+import { defineEventHandler, getRequestHeaders, readBody } from 'h3'
 import type { H3Event } from 'h3'
 
 type AnyRecord = Record<string, unknown>

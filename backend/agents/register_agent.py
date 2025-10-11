@@ -4,7 +4,10 @@ import json
 import os
 from pathlib import Path
 
-import openai
+try:
+    import openai
+except ModuleNotFoundError:
+    openai = None
 from dotenv import load_dotenv
 
 # === INIT ENVIRONNEMENT ===
@@ -14,9 +17,23 @@ REGISTRY_PATH = AGENTS_DIR / "agents_registry.json"
 
 # Chargement des variables d'environnement
 load_dotenv(dotenv_path=ENV_PATH)
-openai.api_key = os.getenv("OPENAI_API_KEY")
-if not openai.api_key:
-    raise ValueError("❌ Clé API OpenAI manquante dans .env")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+
+def ensure_openai_ready():
+    """Initialise le client OpenAI uniquement pour les agents à inscrire."""
+    if openai is None:
+        raise ModuleNotFoundError(
+            "❌ Package openai absent. Installe-le (ex: poetry add openai) pour enregistrer de nouveaux agents."
+        )
+    if not getattr(openai, "api_key", None):
+        if not OPENAI_API_KEY:
+            raise ValueError(
+                "❌ Clé API OpenAI manquante (définis OPENAI_API_KEY dans ton environnement)."
+            )
+        openai.api_key = OPENAI_API_KEY
+    return openai
+
 
 # === UTILS ===
 
@@ -62,6 +79,7 @@ def register_agent_from_file(json_path: Path, existing_ids: dict):
         return {name: existing_ids[env_key]}
 
     print(f"\n📤 Enregistrement de l'agent : {name}...")
+    client = ensure_openai_ready()
 
     # Champs autorisés pour l'API
     allowed = {"name", "description", "instructions", "model", "tools"}
@@ -74,7 +92,7 @@ def register_agent_from_file(json_path: Path, existing_ids: dict):
         data_api["instructions"] = truncate_field(data_api["instructions"], max_len=1024)
 
     try:
-        resp = openai.beta.assistants.create(**data_api)
+        resp = client.beta.assistants.create(**data_api)
         aid = resp.id
 
         # Ajouter dans .env

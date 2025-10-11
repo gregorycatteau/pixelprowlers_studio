@@ -5,6 +5,7 @@ Base agnostique d'environnement avec chargement .env et fallback sûrs.
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import timedelta
 from pathlib import Path
@@ -24,6 +25,8 @@ else:
 # ──────────────────────────────────────────────────────────────────────────────
 # Chargement .env (commun + spécifique à APP_ENV)
 # ──────────────────────────────────────────────────────────────────────────────
+CLI_ENV = os.environ.copy()
+
 try:
     import environ  # type: ignore
 except Exception:
@@ -51,6 +54,9 @@ _read_env_file(BASE_DIR / ".env", overwrite=False)
 # .env spécifique (peut redéfinir APP_ENV & co)
 APP_ENV = os.getenv("APP_ENV", APP_ENV).strip().lower()
 _read_env_file(BASE_DIR / f".env.{APP_ENV}", overwrite=True)
+
+MERGED_ENV = dict(os.environ)
+MERGED_ENV.update(CLI_ENV)
 
 
 def _env_list(key: str, default: List[str] | None = None) -> List[str]:
@@ -136,6 +142,21 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.SessionAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": os.getenv("DRF_THROTTLE_ANON", "30/min"),
+        "user": os.getenv("DRF_THROTTLE_USER", "120/min"),
+        "jwt_obtain": os.getenv("DRF_THROTTLE_JWT_OBTAIN", "10/min"),
+        "jwt_refresh": os.getenv("DRF_THROTTLE_JWT_REFRESH", "30/min"),
+        "jwt_verify": os.getenv("DRF_THROTTLE_JWT_VERIFY", "60/min"),
+        "ask_agent": os.getenv("DRF_THROTTLE_ASK_AGENT", "5/min"),
+        "conversations_create": os.getenv("DRF_THROTTLE_CONV_CREATE", "5/min"),
+        "messages_create": os.getenv("DRF_THROTTLE_MSG_CREATE", "30/min"),
+    },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 MIDDLEWARE = [
@@ -148,6 +169,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "studio_core.middleware.SecurityHeadersMiddleware",
     # 🔎 Request-ID + Audit JWT (IP, UA, jti, scopes…)
     "accounts.middleware.RequestIDAndAuditMiddleware",
     "studio_core.api_auth_middleware.ApiAuthRedirectTo401Middleware",
@@ -177,55 +199,14 @@ WSGI_APPLICATION = "studio_core.wsgi.application"
 # ──────────────────────────────────────────────────────────────────────────────
 # DB (DATABASE_URL → dict) avec fallback SQLite sécurisé
 # ──────────────────────────────────────────────────────────────────────────────
-from dj_database_url import config as dj_db_config  # type: ignore
+from studio_core.dbconf import build_database_settings, describe_db_connection
 
-_database_url = (os.getenv("DATABASE_URL") or "").strip()
-
-
-def _build_db_config() -> dict:
-    """Construit DATABASES['default'] depuis DATABASE_URL, fallback SQLite si besoin."""
-    ssl_req = APP_ENV == "prod"
-    db: dict = {}
-    if _database_url:
-        try:
-            db = dj_db_config(default=_database_url, conn_max_age=60, ssl_require=ssl_req) or {}
-        except Exception:
-            db = {}
-    if not db or "ENGINE" not in db:
-        db = {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": str(BASE_DIR / "db.sqlite3"),
-        }
-    return db
-
-
-DATABASES = {"default": _build_db_config()}
+DATABASES = build_database_settings(BASE_DIR, MERGED_ENV)
+DB_CONNECTION_LABEL = describe_db_connection(DATABASES["default"])
 
 # ──────────────────────────────────────────────────────────────────────────────
 # DRF — JWT + Throttling
 # ──────────────────────────────────────────────────────────────────────────────
-REST_FRAMEWORK = {
-    "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
-    ],
-    "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
-    ],
-    "DEFAULT_THROTTLE_CLASSES": [
-        "rest_framework.throttling.AnonRateThrottle",
-        "rest_framework.throttling.UserRateThrottle",
-        "rest_framework.throttling.ScopedRateThrottle",
-    ],
-    "DEFAULT_THROTTLE_RATES": {
-        "anon": os.getenv("DRF_THROTTLE_ANON", "30/min"),
-        "user": os.getenv("DRF_THROTTLE_USER", "120/min"),
-        "jwt_obtain": os.getenv("DRF_THROTTLE_JWT_OBTAIN", "10/min"),
-        "jwt_refresh": os.getenv("DRF_THROTTLE_JWT_REFRESH", "30/min"),
-        "jwt_verify": os.getenv("DRF_THROTTLE_JWT_VERIFY", "60/min"),
-    },
-    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
-}
-
 # --- SimpleJWT (RS256 si clés fournies, sinon fallback HS256) ---
 JWT_PRIVATE_KEY = os.environ.get("JWT_PRIVATE_KEY", "").strip()
 JWT_PUBLIC_KEY = os.environ.get("JWT_PUBLIC_KEY", "").strip()
@@ -340,18 +321,62 @@ DJANGO_LOG_LEVEL = os.getenv("DJANGO_LOG_LEVEL", "INFO").upper()
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "filters": {
+        "redact_pii": {
+            "()": "studio_core.logging.AgentPIIRedactionFilter",
+        },
+        "request_context": {
+            "()": "studio_core.logging.RequestContextFilter",
+        },
+    },
     "formatters": {
+        "json": {"()": "studio_core.logging.JsonLogFormatter"},
         "verbose": {"format": "[{levelname}] {asctime} {name}:{lineno} — {message}", "style": "{"},
         "simple": {"format": "[{levelname}] {message}", "style": "{"},
     },
-    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "verbose"}},
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "json",
+            "filters": ["redact_pii", "request_context"],
+        }
+    },
     "root": {"handlers": ["console"], "level": DJANGO_LOG_LEVEL},
     "loggers": {
         "django.db.backends": {
             "handlers": ["console"],
             "level": os.getenv("SQL_LOG_LEVEL", "WARNING"),
         },
+        "ai_assistants.ask": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "studio_core.request": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
     },
 }
+
+SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
+if SENTRY_DSN:
+    from sentry_sdk import init as sentry_init
+    from sentry_sdk.integrations.django import DjangoIntegration
+    from sentry_sdk.integrations.logging import LoggingIntegration
+
+    sentry_logging = LoggingIntegration(level=logging.INFO, event_level=logging.ERROR)
+
+    sentry_init(
+        dsn=SENTRY_DSN,
+        integrations=[DjangoIntegration(), sentry_logging],
+        environment=os.getenv("SENTRY_ENVIRONMENT", APP_ENV),
+        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0")),
+        profiles_sample_rate=float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0")),
+        send_default_pii=False,
+    )
+
+logging.getLogger("studio_core.db").info("DB target: %s", DB_CONNECTION_LABEL)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

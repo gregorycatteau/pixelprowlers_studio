@@ -33,6 +33,7 @@ django-allauth = "*"
 requests = "*"
 pyzipper = "*"
 pgpy = "*"
+sentry-sdk = {extras = ["django"], version = "^2.41.0"}
 
 [tool.poetry.group.dev.dependencies]
 django-debug-toolbar = "^4.4.6"

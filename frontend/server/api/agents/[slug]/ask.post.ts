@@ -50,6 +50,8 @@ const handler: EventHandler = defineEventHandler(async (event: H3Event): Promise
   const upstreamHeaders: Record<string, string> = { 'content-type': 'application/json' }
   if (reqHeaders.cookie) upstreamHeaders.cookie = reqHeaders.cookie
   if (reqHeaders['x-csrftoken']) upstreamHeaders['x-csrftoken'] = reqHeaders['x-csrftoken']
+  if (reqHeaders['x-request-nonce'])
+    upstreamHeaders['x-request-nonce'] = reqHeaders['x-request-nonce']
 
   // --- appel upstream ---
   const res: AskResponse = await $fetch<AskResponse>(

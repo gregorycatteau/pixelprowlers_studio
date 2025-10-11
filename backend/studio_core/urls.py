@@ -6,8 +6,10 @@ from __future__ import annotations
 from accounts.admin import admin_site
 from django.conf import settings
 from django.conf.urls.static import static
-from django.http import HttpResponse, HttpResponseNotFound
+from django.http import HttpResponse, HttpResponseNotFound, JsonResponse
+from django.middleware.csrf import get_token
 from django.urls import include, path, re_path
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.generic import RedirectView
 
 # OpenAPI schema views (drf-spectacular)
@@ -35,6 +37,13 @@ def admin_honeypot(*args, **kwargs):
     return HttpResponseNotFound()
 
 
+@ensure_csrf_cookie
+def csrf_token(request):
+    resp = JsonResponse({"ok": True, "csrf": get_token(request)}, status=200)
+    resp["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    return resp
+
+
 urlpatterns = [
     # =========================
     # Admin sécurisé
@@ -59,6 +68,7 @@ urlpatterns = [
     # REST test
     # =========================
     path("api/ping/", views.api_ping, name="api_ping"),
+    path("api/auth/csrf/", csrf_token, name="csrf_token"),
     path("api/hello/", views.api_hello, name="api_hello"),
     path("_fa/verify", views.forward_auth_verify, name="forward_auth_verify"),
     path(".well-known/jwks.json", views.jwks_json, name="jwks_json"),

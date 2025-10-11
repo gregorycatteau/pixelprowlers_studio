@@ -146,7 +146,20 @@ except Exception:  # pragma: no cover - fallback for environments without rateli
 ALLOWED_EVENT_SUBJECTS = {"intake.lead.created"}
 
 
-from rest_framework.decorators import api_view, permission_classes
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def auth_me(request):
+    """Retourne les informations essentielles de l'utilisateur connecté."""
+
+    user = request.user
+    data = {
+        "id": getattr(user, "pk", None),
+        "username": user.get_username(),
+        "email": (getattr(user, "email", "") or ""),
+        "is_staff": bool(getattr(user, "is_staff", False)),
+        "is_superuser": bool(getattr(user, "is_superuser", False)),
+    }
+    return Response({"ok": True, "user": data}, status=200)
 
 
 @api_view(["POST"])
@@ -273,5 +286,6 @@ router.register(r"v1/users", UserViewSet, basename="user")
 # This allows `include("api.views")` directly in the project urls if desired.
 urlpatterns = [
     *router.urls,
+    path("auth/me/", auth_me, name="auth_me"),
     path("events/<path:subject>/", events_gateway, name="events_gateway"),
 ]

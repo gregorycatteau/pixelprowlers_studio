@@ -24,7 +24,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { navigateTo } from '#app'
+import { navigateTo } from 'nuxt/app'
 
 const step = ref<0 | 1 | 2>(0)
 

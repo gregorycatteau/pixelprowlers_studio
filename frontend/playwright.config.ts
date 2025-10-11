@@ -11,8 +11,12 @@ import { defineConfig, devices } from '@playwright/test'
  * Configure baseURL via env:
  *   PPW_BASE_URL=https://clients.local npm run test:e2e
  */
+const backendHealthUrl = process.env.PPW_BACKEND_HEALTH_URL || 'http://127.0.0.1:8000/ready/'
+const frontendBaseUrl = process.env.PPW_BASE_URL || 'http://127.0.0.1:3000'
+
 export default defineConfig({
   testDir: './test-e2e',
+  fullyParallel: false,
   /* Fail fast-ish, but retry once for flakiness tolerance */
   retries: 1,
   /* Default timeout per test (ms) */
@@ -32,7 +36,7 @@ export default defineConfig({
   /* Shared settings for all projects */
   use: {
     headless: true,
-    baseURL: process.env.PPW_BASE_URL || 'http://localhost:3000',
+    baseURL: frontendBaseUrl,
     actionTimeout: 10_000,
     navigationTimeout: 20_000,
 
@@ -61,15 +65,24 @@ export default defineConfig({
     //   use: { ...devices['Desktop Safari'] },
     // },
   ],
+  workers: process.env.CI ? 1 : undefined,
 
-  /* If you need to auto-start a server, define it here.
-     For CI integration with existing harnesses, we leave this disabled. */
-  // webServer: [
-  //   {
-  //     command: 'npm run dev',
-  //     url: process.env.PPW_BASE_URL || 'http://localhost:3000',
-  //     reuseExistingServer: !process.env.CI,
-  //     timeout: 120_000,
-  //   },
-  // ],
+  webServer: [
+    {
+      command: 'npm run dev:back',
+      url: backendHealthUrl,
+      reuseExistingServer: !process.env.CI,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      timeout: 180_000,
+    },
+    {
+      command: 'npm run dev',
+      url: frontendBaseUrl,
+      reuseExistingServer: !process.env.CI,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      timeout: 180_000,
+    },
+  ],
 })

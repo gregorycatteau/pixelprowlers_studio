@@ -33,49 +33,121 @@
           />
         </div>
 
-        <button class="btn-primary" :disabled="loading">
-          <span v-if="!loading">Continuer</span>
+        <button class="btn-primary" :disabled="isDisabled">
+          <span v-if="!submitting">Continuer</span>
           <span v-else>Ouverture…</span>
         </button>
 
+        <p v-if="retryAfter > 0" class="hint">
+          Réessayer dans {{ retryAfter }} s
+        </p>
         <p v-if="errorMsg" class="error">
           {{ errorMsg }}
         </p>
       </form>
     </div>
+    <PxToast v-model="toast.visible" :variant="toast.variant" :message="toast.message" />
   </section>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onBeforeUnmount, onMounted, reactive, ref, computed } from 'vue'
 import { navigateTo } from '#app'
+import { useRoute } from '#imports'
+import type { FetchError } from 'ofetch'
+
+const auth = useAuth()
+const csrf = useCsrf()
+const route = useRoute()
 
 const username = ref('')
 const password = ref('')
-const loading = ref(false)
+const submitting = ref(false)
 const errorMsg = ref('')
+const retryAfter = ref(0)
+let retryTimer: ReturnType<typeof setInterval> | null = null
 
-async function onSubmit() {
-  loading.value = true
-  errorMsg.value = ''
-  try {
-    const res = (await $fetch('/api/auth/creds', {
-      method: 'POST',
-      body: { username: username.value, password: password.value },
-      credentials: 'include',
-    })) as { status?: string; next?: string[] }
+const toast = reactive({
+  visible: false,
+  message: '',
+  variant: 'info' as 'info' | 'success' | 'warning' | 'danger',
+})
 
-    if (res?.status === 'pending') {
-      // Chemin “normal” : on passe en préflight neutre
-      await navigateTo('/preflight')
-    } else {
-      // Réponse générique
-      errorMsg.value = 'Impossible d’ouvrir la session.'
+const openToast = (message: string, variant: 'info' | 'success' | 'warning' | 'danger' = 'info') => {
+  toast.message = message
+  toast.variant = variant
+  toast.visible = true
+}
+
+const clearRetryTimer = () => {
+  if (retryTimer) {
+    clearInterval(retryTimer)
+    retryTimer = null
+  }
+}
+
+const startRetryCountdown = (seconds: number) => {
+  clearRetryTimer()
+  retryAfter.value = Math.max(1, Math.round(seconds))
+  retryTimer = setInterval(() => {
+    retryAfter.value -= 1
+    if (retryAfter.value <= 0) {
+      clearRetryTimer()
     }
-  } catch (e: any) {
-    errorMsg.value = 'Impossible d’ouvrir la session.'
+  }, 1000)
+}
+
+const isDisabled = computed(() => {
+  if (submitting.value) return true
+  if (retryAfter.value > 0) return true
+  return !username.value.trim() || !password.value.trim()
+})
+
+onMounted(async () => {
+  await auth.bootstrap()
+  if (!csrf.token) {
+    await csrf.refresh()
+  }
+  if (route.query.forbidden) {
+    errorMsg.value = 'Accès réservé aux administrateurs.'
+  }
+})
+
+onBeforeUnmount(() => {
+  clearRetryTimer()
+})
+
+const onSubmit = async () => {
+  if (isDisabled.value) return
+  submitting.value = true
+  errorMsg.value = ''
+
+  try {
+    const res = await auth.login({
+      username: username.value.trim(),
+      password: password.value,
+    })
+
+    if (res?.ok) {
+      openToast('Session ouverte.', 'success')
+      await navigateTo('/gate')
+      return
+    }
+  } catch (err) {
+    const error = err as FetchError<Record<string, unknown>>
+    const status = error?.response?.status
+    if (status === 401) {
+      errorMsg.value = 'Identifiants invalides.'
+    } else if (status === 429) {
+      const retryHeader = error.response?.headers?.get?.('Retry-After')
+      const seconds = retryHeader ? Number(retryHeader) : 30
+      startRetryCountdown(Number.isFinite(seconds) ? seconds : 30)
+      errorMsg.value = 'Trop de tentatives. Patientez avant de réessayer.'
+    } else {
+      errorMsg.value = 'Service indisponible. Réessayez plus tard.'
+    }
   } finally {
-    loading.value = false
+    submitting.value = false
   }
 }
 </script>
@@ -137,8 +209,11 @@ async function onSubmit() {
 .btn-primary:disabled {
   opacity: 0.6;
 }
-.btn-primary:hover {
+.btn-primary:hover:enabled {
   transform: translateY(-1px);
+}
+.hint {
+  @apply text-xs text-color-muted;
 }
 .error {
   @apply mt-3 text-sm;
