@@ -208,6 +208,21 @@ Attaques simulées
 
 Append ici un bloc par sous‑sprint validé: fichiers clés modifiés, 2 commandes de test et “Attacks simulated”.
 
+### [2025‑10‑11] S1 — Device/Layout — Done
+- Fichiers:
+  - frontend/app/app.vue (layoutKey device‑only + heuristique UA desktop → laptop)
+  - frontend/nuxt.config.ts (suppression du defaultUserAgent forcé)
+  - frontend/app/layouts/{mobile.vue, tablet.vue, laptop.vue} (nouveaux layouts)
+  - frontend/app/plugins/device.ts (no‑op; ne mute plus les flags du module)
+  - docs/ui/01-device-layout.md (nouvelle doc S1: SSR/CSR, bonnes pratiques)
+- Tests:
+  - `npm run dev` (front) → la console affiche “[ui] layout -> laptop” (UA desktop), aucun mismatch d’hydratation
+  - `curl -I http://dev.localhost` → en‑têtes sécu OK (Caddy)
+- Attacks simulated:
+  - UA desktop vs mobile: heuristique UA force “laptop” quand l’UA est clairement desktop
+  - Désactivation “device toolbar” → les flags reviennent Desktop, layout stable
+  - Bascule dark/light → pas de swap de layout, plus de mismatch SSR/CSR
+
 Exemple d’entrée:
 
 ### [YYYY‑MM‑DD] S2 — CSRF endpoint — Done
