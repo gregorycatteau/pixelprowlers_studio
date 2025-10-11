@@ -16,10 +16,10 @@ const { isMobile, isTablet, isLaptop } = useDeviceKind()
 const { isDark } = useUserTheme()
 
 const layoutKey = computed(() => {
-  if (isMobile.value) return isDark.value ? 'mobile-dark' : 'mobile-light'
-  if (isTablet.value) return isDark.value ? 'tablet-dark' : 'tablet-light'
-  if (isLaptop.value) return isDark.value ? 'laptop-dark' : 'laptop-light'
-  return isDark.value ? 'laptop-dark' : 'laptop-light'
+  if (isMobile.value) return 'mobile'
+  if (isTablet.value) return 'tablet'
+  if (isLaptop.value) return 'laptop'
+  return 'laptop'
 })
 
 
