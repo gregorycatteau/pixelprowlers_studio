@@ -18,6 +18,9 @@ SECURE_PROXY_SSL_HEADER = None
 # Cookies non "secure" en local
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
+# CSRF double-submit en dev: cookie lisible par JS pour envoyer X-CSRFToken
+CSRF_COOKIE_HTTPONLY = False
+CSRF_COOKIE_SAMESITE = "Lax"
 
 # Debug Toolbar si installée
 try:
