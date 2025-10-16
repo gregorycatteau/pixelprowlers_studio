@@ -46,6 +46,7 @@
         </p>
       </form>
     </div>
+    <NuxtPage />
     <PxToast v-model="toast.visible" :variant="toast.variant" :message="toast.message" />
   </section>
 </template>
@@ -118,22 +119,71 @@ onBeforeUnmount(() => {
 })
 
 const onSubmit = async () => {
+  // Garde-fou UX: ne pas soumettre si champs vides / cooldown actif
   if (isDisabled.value) return
   submitting.value = true
   errorMsg.value = ''
 
   try {
+    // Appel standard via le composable (POST /api/auth/login/)
+    // Remarque: l'API peut renvoyer {decision:'pending_2fa', fa_required:boolean}
+    if (process.client) {
+      // Journalisation client pour diagnostic — supprimable en prod
+      console.debug('[login] submit payload (masked)', {
+        username: username.value.trim(),
+        password_len: password.value.length,
+      })
+    }
     const res = await auth.login({
       username: username.value.trim(),
       password: password.value,
     })
 
-    if (res?.ok) {
+    if (process.client) {
+      console.debug('[login] response', res)
+    }
+
+    const anyRes = res as any
+
+    // Cas 2FA différée: le backend indique une décision/état "pending_2fa"
+    // Compat backend: accepte decision === 'pending_2fa' OU status === 'pending_2fa'
+    if (anyRes?.decision === 'pending_2fa' || anyRes?.status === 'pending_2fa') {
+      if (anyRes?.fa_required === true) {
+        // 2FA requise: stocker l'expiration pour le compte à rebours et rediriger
+        try {
+          const expires = Number(anyRes?.eotp_expires_in)
+          if (Number.isFinite(expires) && expires > 0) {
+            const ts = Date.now() + Math.round(expires) * 1000
+            sessionStorage.setItem('eotp_expires_at', String(ts))
+          }
+        } catch {}
+        openToast('Vérification à deux facteurs requise.', 'info')
+        await navigateTo('/login/2fa')
+        return
+      }
+      // 2FA non requise: session considérée ouverte => aller au "gate"
       openToast('Session ouverte.', 'success')
+      // Rafraîchir l’état utilisateur pour hydrater le store avant la redirection
+      await auth.fetchMe(true).catch(() => {})
       await navigateTo('/gate')
       return
     }
+
+    // Cas succès "classique" (contrat antérieur): ok === true
+    if (res?.ok) {
+      openToast('Session ouverte.', 'success')
+      await auth.fetchMe(true).catch(() => {})
+      await navigateTo('/gate')
+      return
+    }
+
+    // Réponse inattendue (ni pending_2fa ni ok): feedback générique
+    errorMsg.value = 'Réponse inattendue du serveur. Réessayez.'
   } catch (err) {
+    if (process.client) {
+      console.error('[login] submit error', err)
+    }
+    // Gestion des erreurs HTTP usuelles
     const error = err as FetchError<Record<string, unknown>>
     const status = error?.response?.status
     if (status === 401) {
