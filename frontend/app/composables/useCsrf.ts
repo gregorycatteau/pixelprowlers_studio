@@ -6,7 +6,8 @@ const COOKIE_NAME = 'csrftoken'
 function readCookie(name: string): string {
   if (process.server) return ''
   const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`))
-  return match ? decodeURIComponent(match[1]) : ''
+  const raw = match?.[1] ?? ''
+  return raw ? decodeURIComponent(raw) : ''
 }
 
 export function useCsrf() {
@@ -28,9 +29,10 @@ export function useCsrf() {
     const nuxtApp = useNuxtApp()
     const promise = (async () => {
       try {
-        const res = await nuxtApp.$fetch<CsrfResponse>('/api/auth/csrf/', {
+        const res = await (nuxtApp as any).$fetch('/api/auth/csrf', {
           method: 'GET',
-        })
+          credentials: 'include',
+        }) as CsrfResponse
         if (res?.csrf) {
           setToken(res.csrf)
         } else if (process.client) {

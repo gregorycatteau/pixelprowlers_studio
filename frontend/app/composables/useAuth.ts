@@ -63,9 +63,10 @@ export function useAuth() {
 
     loading.value = true
     try {
-      const res = await nuxtApp.$fetch<MeResponse>('/api/auth/me/', {
+      const res = (await (nuxtApp as any).$fetch('/api/auth/me', {
         method: 'GET',
-      })
+        credentials: 'include',
+      })) as MeResponse
       if (res?.user && res.ok !== false) {
         setUser({
           username: res.user.username,
@@ -73,7 +74,7 @@ export function useAuth() {
           is_superuser: Boolean(res.user.is_superuser),
           scopes: res.user.scopes,
         })
-        setGate(res.gate)
+        setGate({ ok: Boolean(res.gate?.ok), ts: res.gate?.ts ?? null })
       } else {
         reset()
       }
@@ -92,10 +93,15 @@ export function useAuth() {
     await csrf.refresh()
     loading.value = true
     try {
-      const res = await nuxtApp.$fetch<LoginResponse>('/api/auth/login/', {
+      const res = (await (nuxtApp as any).$fetch('/api/auth/login', {
         method: 'POST',
         body: payload,
-      })
+        credentials: 'include',
+        headers: {
+          // FR: double-submit cookie côté client → en-tête explicite pour fiabiliser le proxy
+          'X-CSRFToken': csrf.token,
+        },
+      })) as LoginResponse
       if (res?.ok) {
         await fetchMe(true)
         nonce.clear()
@@ -108,8 +114,12 @@ export function useAuth() {
 
   const logout = async () => {
     try {
-      await nuxtApp.$fetch('/api/auth/logout/', {
+      await (nuxtApp as any).$fetch('/api/auth/logout', {
         method: 'POST',
+        credentials: 'include',
+        headers: {
+          'X-CSRFToken': csrf.token,
+        },
       })
     } finally {
       reset()
