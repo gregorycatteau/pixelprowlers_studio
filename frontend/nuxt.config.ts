@@ -1,5 +1,9 @@
 // frontend/nuxt.config.ts
 import tailwindcss from '@tailwindcss/vite'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const isProductionCsp = process.env.NODE_ENV === 'production' || process.env.APP_ENV === 'prod'
 
@@ -33,6 +37,8 @@ export default defineNuxtConfig({
     plugins: [tailwindcss()],
   },
   nitro: {
+    // Utilise un chemin absolu pour éviter les résolutions erronées en dev
+    plugins: [resolve(__dirname, 'server/plugins/file-polyfill.ts')],
     routeRules: {
       '/**': {
         headers: {
