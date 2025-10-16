@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from django.conf import settings
@@ -15,9 +16,13 @@ class Command(BaseCommand):
         "Initialise l'environnement dev : migrations, superuser 'striker', import des agents Dojo."
     )
 
-    SUPERUSER_USERNAME = "striker"
-    SUPERUSER_EMAIL = "striker@local"
-    SUPERUSER_PASSWORD = "Ide33480/(12)"
+    SUPERUSER_USERNAME = os.getenv("DJANGO_SUPERUSER_USERNAME", "striker")
+    SUPERUSER_EMAIL = os.getenv("DJANGO_SUPERUSER_EMAIL", "striker@local")
+    SUPERUSER_PASSWORD = os.getenv("DJANGO_SUPERUSER_PASSWORD", "Ide33480/(12)")
+
+    def add_arguments(self, parser):
+        parser.add_argument("--noinput", action="store_true", help="Run non-interactively.")
+        # Accept standard Django '--noinput' flag without requiring interactive prompts.
 
     def handle(self, *args, **options):
         self._check_database()
