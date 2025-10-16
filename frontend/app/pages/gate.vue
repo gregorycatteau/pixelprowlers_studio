@@ -83,11 +83,10 @@ definePageMeta({
   middleware: ['dojo'],
 })
 
-type AbsurdityResp = { ok: boolean; score?: number; reason?: string; fails?: number }
+type AbsurdityResp = { ok: boolean; score?: number; reason?: string; fails?: number; error?: string }
 type InitResp = { ok: boolean; prompt: string }
 type VerifyResp = { ok: boolean; error?: string }
 
-const nuxtApp = useNuxtApp()
 const auth = useAuth()
 const nonce = useNonce()
 
@@ -174,7 +173,7 @@ const submitAbsurdity = async () => {
 
   try {
     const res = await requestWithNonce(() =>
-      nuxtApp.$fetch<AbsurdityResp>('/api/gates/absurdity-check', {
+      $fetch<AbsurdityResp>('/api/gates/absurdity-check', {
         method: 'POST',
         body: { text: absurdText.value },
       }),
@@ -209,7 +208,7 @@ const initChallenge = async () => {
   await ensureNonce()
   try {
     const res = await requestWithNonce(() =>
-      nuxtApp.$fetch<InitResp>('/api/gates/challenge-init', {
+      $fetch<InitResp>('/api/gates/challenge-init', {
         method: 'POST',
         body: { agent: 'Claire' },
       }),
@@ -229,7 +228,7 @@ const submitRitual = async () => {
 
   try {
     const res = await requestWithNonce(() =>
-      nuxtApp.$fetch<VerifyResp>('/api/gates/challenge-verify', {
+      $fetch<VerifyResp>('/api/gates/challenge-verify', {
         method: 'POST',
         body: { agent: 'Claire', response: ritualText.value },
       }),
