@@ -18,6 +18,8 @@ from .auth import (
     LogoutCookieView,
     RefreshCookieView,
     WhoAmIView,
+    api_auth_eotp_resend,
+    api_auth_eotp_verify,
     api_auth_login,
     api_auth_nonce,
     api_auth_nonce_verify,
@@ -44,6 +46,8 @@ urlpatterns = [
     path("auth/totp/bootstrap/", api_auth_totp_bootstrap, name="auth_totp_bootstrap"),
     path("auth/totp/activate/", api_auth_totp_activate, name="auth_totp_activate"),
     path("auth/totp/verify/", api_auth_totp_verify, name="auth_totp_verify"),
+    path("auth/2fa/email/verify/", api_auth_eotp_verify, name="auth_eotp_verify"),
+    path("auth/2fa/email/resend/", api_auth_eotp_resend, name="auth_eotp_resend"),
     path(
         "auth/totp/recovery/export/",
         api_auth_totp_recovery_export,

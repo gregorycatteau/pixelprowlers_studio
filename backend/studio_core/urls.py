@@ -104,11 +104,17 @@ urlpatterns = [
     # Accounts (login-cookie, refresh-cookie, whoami, etc.)
     # =========================
     path("api/accounts/", include("accounts.urls")),
+    # Alias to expose /api/auth/* directly (frontend expects these)
+    path("api/", include("accounts.urls")),
     # =========================
     # API Agents (consommée par Nuxt)
     # =========================
     path("api/", include("api.views")),
     path("api/", include("ai_assistants.urls")),
+    # =========================
+    # MCP serveur (consommé par les clients MCP)
+    # =========================
+    path("", include("mcp_server.urls")),
 ]
 
 # Debug toolbar + médias en dev

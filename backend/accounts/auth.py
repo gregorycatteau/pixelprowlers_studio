@@ -157,12 +157,134 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model, login
-from django.http import JsonResponse
+from django.core.mail import send_mail
+from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_POST
 
 User = get_user_model()
+
+# ──────────────────────────────────────────────────────────────────────────────
+# E-OTP (Email OTP) — helpers & config
+# ──────────────────────────────────────────────────────────────────────────────
+import re as _re
+
+try:
+    from argon2 import PasswordHasher  # type: ignore
+
+    _EOTP_PWH = PasswordHasher()
+except Exception:
+    _EOTP_PWH = None
+
+_EOTP_TTL = int(os.getenv("EOTP_TTL_SECONDS", "300"))  # 5 minutes
+_EOTP_COOLDOWN = int(os.getenv("EOTP_RESEND_COOLDOWN_SECONDS", "90"))  # resend cooldown
+_EOTP_MAX_RESENDS = int(os.getenv("EOTP_MAX_RESENDS", "3"))
+_EOTP_VERIFY_MAX_ATTEMPTS = int(os.getenv("EOTP_VERIFY_MAX_ATTEMPTS", "5"))
+_EOTP_PEPPER = os.getenv("EOTP_PEPPER", getattr(settings, "SECRET_KEY", ""))
+
+
+def _eotp_cache_key(session_key: str) -> str:
+    return f"eotp:{session_key}"
+
+
+def _eotp_hash(code: str) -> str:
+    payload = f"{code}:{_EOTP_PEPPER}"
+    if _EOTP_PWH is not None:
+        try:
+            return _EOTP_PWH.hash(payload)
+        except Exception:
+            pass
+    import hashlib
+
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _eotp_verify_hash(stored_hash: str, code: str) -> bool:
+    payload = f"{code}:{_EOTP_PEPPER}"
+    if _EOTP_PWH is not None:
+        try:
+            return _EOTP_PWH.verify(stored_hash, payload)
+        except Exception:
+            return False
+    import hashlib
+    import hmac
+
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return hmac.compare_digest(stored_hash, digest)
+
+
+def _eotp_state_get(request):
+    sk = request.session.session_key
+    if not sk:
+        return None
+    return cache.get(_eotp_cache_key(sk))
+
+
+def _eotp_state_set(request, state: dict, ttl: int | None = None) -> None:
+    if not request.session.session_key:
+        request.session.save()
+    key = _eotp_cache_key(str(request.session.session_key))
+    cache.set(key, state, timeout=int(ttl or _EOTP_TTL))
+
+
+def _eotp_state_del(request) -> None:
+    sk = request.session.session_key
+    if sk:
+        cache.delete(_eotp_cache_key(sk))
+
+
+def _eotp_issue(request, user) -> dict:
+    # Ensure session key exists
+    if not request.session.session_key:
+        request.session.save()
+    now = int(timezone.now().timestamp())
+    # Generate a uniform 6-digit code
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    state = {
+        "hash": _eotp_hash(code),
+        "exp": now + _EOTP_TTL,
+        "attempts": 0,
+        "consumed": False,
+        "resend_count": 1,
+        "last_sent": now,
+        "user_id": getattr(user, "pk", None),
+    }
+    _eotp_state_set(request, state, ttl=_EOTP_TTL)
+
+    # Dev log of the OTP in non-prod or when EOTP_DEV_LOG is enabled (do not enable in prod)
+    try:
+        if getattr(settings, "DEBUG", False) or os.getenv("EOTP_DEV_LOG", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        ):
+            logger.info(
+                "eotp.dev_issued user_id=%s code=%s expires_in=%s",
+                getattr(user, "pk", None),
+                code,
+                _EOTP_TTL,
+            )
+    except Exception:
+        pass
+
+    # Send email (minimal contents)
+    try:
+        subj = "Votre code de vérification — PixelProwlers Studio"
+        msg = f"Votre code: {code}\nValable {int(_EOTP_TTL/60)} minute(s). Ne le partagez pas."
+        send_mail(
+            subj,
+            msg,
+            getattr(settings, "DEFAULT_FROM_EMAIL", None),
+            ["contact@pixelprowlers.io"],
+            fail_silently=True,
+        )
+    except Exception:
+        # Never break login flow on email issues
+        pass
+
+    return {"expires_in": _EOTP_TTL, "sent": True}
 
 
 def _jwt_lifetimes_seconds() -> tuple[int, int]:
@@ -746,7 +868,7 @@ def api_auth_totp_activate(request):
 def api_auth_login(request):
     """
     POST /api/auth/login/
-    Body: { "email": string, "password": string }
+    Body: { "email": string, "password": string }  (ou { "username": string, "password": string })
     Returns: { status: "pending_2fa", user_hint } on valid credentials, else 401.
     """
     try:
@@ -754,7 +876,8 @@ def api_auth_login(request):
     except Exception:
         return JsonResponse({"status": "error", "error": "bad_json"}, status=400)
 
-    email = (data.get("email") or "").strip()
+    # Accepte email OU username pour compat front
+    email = (data.get("email") or data.get("username") or "").strip()
     password = data.get("password") or ""
     if not email or not password:
         return JsonResponse({"status": "error", "error": "missing_credentials"}, status=400)
@@ -802,22 +925,37 @@ def api_auth_login(request):
         )
         return JsonResponse({"status": "error", "error": "invalid_credentials"}, status=401)
 
-    # Stage 1 ok → require TOTP (pending_2fa)
+    # Stage 1 ok → require 2FA (superusers: E-OTP by email)
     request.session["pending_2fa_user"] = user.pk
     request.session["pending_2fa_at"] = int(timezone.now().timestamp())
     request.session.modified = True
+
+    fa_required = bool(getattr(user, "is_superuser", False))
+    eotp_meta = None
+    if fa_required:
+        try:
+            eotp_meta = _eotp_issue(request, user)
+        except Exception:
+            eotp_meta = None
 
     hint_src = getattr(user, "username", "") or getattr(user, "email", "") or ""
     if "@" in hint_src:
         hint_src = hint_src.split("@")[0]
     user_hint = (hint_src[:2] + "…") if hint_src else ""
 
-    resp = JsonResponse({"status": "pending_2fa", "user_hint": user_hint}, status=200)
+    payload = {"status": "pending_2fa", "user_hint": user_hint}
+    if fa_required:
+        payload["fa_required"] = True
+        if eotp_meta and "expires_in" in eotp_meta:
+            payload["eotp_expires_in"] = int(eotp_meta["expires_in"])
+
+    resp = JsonResponse(payload, status=200)
     resp["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp["Pragma"] = "no-cache"
     resp["Expires"] = "0"
-    # Metrics: login pending 2FA (no PII), propagate FA requirement if present
-    fa_req = str(request.META.get("HTTP_X_FA_REQUIRE_TURNSTILE", "")).lower() in (
+
+    # Metrics + structured log
+    fa_req_hdr = str(request.META.get("HTTP_X_FA_REQUIRE_TURNSTILE", "")).lower() in (
         "1",
         "true",
         "yes",
@@ -827,16 +965,15 @@ def api_auth_login(request):
         "pending_2fa",
         realm=getattr(settings, "REALM_NAME", None),
         risk_score=None,
-        fa_required=fa_req,
+        fa_required=fa_required or fa_req_hdr,
     )
-    # Structured JSON log
     _auth_log(
         request,
         endpoint="login",
         decision="pending_2fa",
         user_id=getattr(getattr(request, "user", None), "pk", None),
         risk_score=None,
-        fa_required=fa_req,
+        fa_required=fa_required or fa_req_hdr,
     )
     return resp
 
@@ -927,6 +1064,198 @@ def api_auth_totp_verify(request):
         path="/",
     )
     return resp
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# E-OTP (Email OTP) endpoints — verify & resend
+# ──────────────────────────────────────────────────────────────────────────────
+@ratelimit(key="ip", rate="10/m", block=False)
+@require_POST
+@csrf_protect
+def api_auth_eotp_verify(request):
+    """
+    POST /api/auth/2fa/email/verify/
+    Body: { "code": "123456" }
+    On success: login session + issue JWT & refresh cookie, clear pending 2FA.
+    Errors are uniform (anti-enum). Strict rate-limit with Retry-After.
+    """
+    # Basic CSRF is enforced via decorator; rate limit per session/user
+    user_id = request.session.get("pending_2fa_user")
+    if not user_id:
+        return JsonResponse({"ok": False, "error": "invalid_code"}, status=401)
+
+    # Rate-limit verify attempts (per user+IP within TTL window)
+    if _rate_exceeded(
+        "eotp:verify", request, user_id, limit=_EOTP_VERIFY_MAX_ATTEMPTS, window_sec=_EOTP_TTL
+    ):
+        resp = JsonResponse({"ok": False, "error": "rate_limited"}, status=429)
+        # Provide Retry-After equal to remaining TTL
+        state = _eotp_state_get(request) or {}
+        remaining = max(0, int(state.get("exp", 0) - int(timezone.now().timestamp())))
+        resp["Retry-After"] = str(max(30, remaining or 30))
+        return resp
+    _rate_hit("eotp:verify", request, user_id, window_sec=_EOTP_TTL)
+
+    try:
+        data = json.loads(request.body.decode("utf-8")) if request.body else {}
+    except Exception:
+        return JsonResponse({"ok": False, "error": "invalid_code"}, status=401)
+
+    code = (data.get("code") or "").strip()
+    if not code or not _re.match(r"^\d{6}$", code):
+        return JsonResponse({"ok": False, "error": "invalid_code"}, status=401)
+
+    state = _eotp_state_get(request)
+    now = int(timezone.now().timestamp())
+    if (
+        not state
+        or state.get("consumed")
+        or now > int(state.get("exp", 0))
+        or int(state.get("user_id") or 0) != int(user_id)
+    ):
+        return JsonResponse({"ok": False, "error": "invalid_code"}, status=401)
+
+    # Constant-time verify (argon2 if available else sha256+pepper)
+    ok = False
+    try:
+        ok = _eotp_verify_hash(str(state.get("hash") or ""), code)
+    except Exception:
+        ok = False
+
+    if not ok:
+        # bump attempts (best-effort)
+        try:
+            state["attempts"] = int(state.get("attempts", 0)) + 1
+            _eotp_state_set(request, state, ttl=max(1, int(state.get("exp", now) - now)))
+        except Exception:
+            pass
+        return JsonResponse({"ok": False, "error": "invalid_code"}, status=401)
+
+    # Success: consume and clear pending
+    try:
+        _eotp_state_del(request)
+    except Exception:
+        pass
+
+    try:
+        user = User.objects.get(pk=user_id, is_active=True)
+    except User.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "invalid_code"}, status=401)
+
+    try:
+        login(request, user)
+    except Exception:
+        pass
+    try:
+        for k in ("pending_2fa_user", "pending_2fa_at"):
+            if k in request.session:
+                del request.session[k]
+        request.session.modified = True
+    except Exception:
+        pass
+
+    resp = _issue_jwt_response(request, user)
+    # Realm cookie for Dojo (admin/superuser)
+    resp.set_cookie(
+        "__Host-pp_realm",
+        "A",
+        httponly=True,
+        secure=bool(getattr(settings, "SESSION_COOKIE_SECURE", False)),
+        samesite="Strict",
+        path="/",
+    )
+    # Metrics/logs
+    record_auth_event(
+        "eotp",
+        "ok",
+        realm=getattr(settings, "REALM_NAME", None),
+        risk_score=None,
+        fa_required=True,
+    )
+    _auth_log(
+        request,
+        endpoint="eotp",
+        decision="ok",
+        user_id=int(user_id),
+        risk_score=None,
+        fa_required=True,
+    )
+    return resp
+
+
+@ratelimit(key="ip", rate="5/m", block=False)
+@require_POST
+@csrf_protect
+def api_auth_eotp_resend(request):
+    """
+    POST /api/auth/2fa/email/resend/
+    Resend a new E-OTP with cooldown/quota. Returns 200 with a uniform body or 429 with Retry-After.
+    """
+    user_id = request.session.get("pending_2fa_user")
+    if not user_id:
+        return JsonResponse({"ok": False, "error": "invalid_state"}, status=401)
+
+    state = _eotp_state_get(request)
+    now_ts = int(timezone.now().timestamp())
+    if (
+        not state
+        or now_ts > int(state.get("exp", 0))
+        or int(state.get("user_id") or 0) != int(user_id)
+    ):
+        # Regenerate a new code if absent/expired but keep same TTL baseline
+        try:
+            user = User.objects.get(pk=user_id, is_active=True)
+        except User.DoesNotExist:
+            return JsonResponse({"ok": False, "error": "invalid_state"}, status=401)
+        meta = _eotp_issue(request, user)
+        return JsonResponse(
+            {
+                "ok": True,
+                "retry_after": _EOTP_COOLDOWN,
+                "expires_in": int(meta.get("expires_in", _EOTP_TTL)),
+            },
+            status=200,
+        )
+
+    # Enforce cooldown & quota
+    resend_count = int(state.get("resend_count", 1))
+    last_sent = int(state.get("last_sent", 0))
+    delta = now_ts - last_sent
+    if resend_count >= _EOTP_MAX_RESENDS or delta < _EOTP_COOLDOWN:
+        retry_after = max(1, _EOTP_COOLDOWN - max(0, delta))
+        resp = JsonResponse({"ok": False, "error": "rate_limited"}, status=429)
+        resp["Retry-After"] = str(retry_after)
+        return resp
+
+    # Regenerate a fresh code (invalidate the previous by overwriting hash)
+    try:
+        user = User.objects.get(pk=user_id, is_active=True)
+    except User.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "invalid_state"}, status=401)
+
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    state["hash"] = _eotp_hash(code)
+    state["last_sent"] = now_ts
+    state["resend_count"] = resend_count + 1
+    _eotp_state_set(request, state, ttl=max(1, int(state.get("exp", now_ts) - now_ts)))
+
+    try:
+        subj = "Votre code de vérification — PixelProwlers Studio"
+        msg = f"Votre code: {code}\nValable {max(1, int((int(state.get('exp', now_ts)) - now_ts)/60))} minute(s). Ne le partagez pas."
+        send_mail(
+            subj,
+            msg,
+            getattr(settings, "DEFAULT_FROM_EMAIL", None),
+            ["contact@pixelprowlers.io"],
+            fail_silently=True,
+        )
+    except Exception:
+        pass
+
+    remaining = max(0, int(state.get("exp", now_ts) - now_ts))
+    return JsonResponse(
+        {"ok": True, "retry_after": _EOTP_COOLDOWN, "expires_in": remaining}, status=200
+    )
 
 
 def _hash_recovery_code(user, code: str) -> str:

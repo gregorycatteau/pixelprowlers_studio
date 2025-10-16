@@ -62,6 +62,24 @@ def _config_from_components(
     }
 
 
+def _ensure_connect_timeout(config: MutableMapping[str, object], connect_timeout: int) -> None:
+    """
+    Ensure a sane connect_timeout is set for PostgreSQL connections to avoid long hangs.
+    Safe no-op for SQLite or other engines.
+    """
+    try:
+        engine = str(config.get("ENGINE", ""))
+        if "postgresql" in engine:
+            opts = config.get("OPTIONS")
+            if not isinstance(opts, dict):
+                config["OPTIONS"] = {"connect_timeout": connect_timeout}
+            else:
+                opts.setdefault("connect_timeout", connect_timeout)
+    except Exception:
+        # Do not fail settings construction due to optional tuning
+        pass
+
+
 def build_database_settings(base_dir: Path, env: Mapping[str, str] | None = None) -> dict:
     """Construct DATABASES from environment variables with sane fallbacks."""
 
@@ -70,10 +88,12 @@ def build_database_settings(base_dir: Path, env: Mapping[str, str] | None = None
     conn_max_age = _as_int(env.get("DB_CONN_MAX_AGE"), 60)
     atomic_requests = _as_bool(env.get("DB_ATOMIC_REQUESTS"), app_env != "prod")
     ssl_required = _as_bool(env.get("DB_SSL_REQUIRE"), app_env == "prod")
+    connect_timeout = _as_int(env.get("DB_CONNECT_TIMEOUT"), 5)
 
     database_url = (env.get("DATABASE_URL") or "").strip()
     if database_url:
-        config = _config_from_url(database_url, conn_max_age, atomic_requests, ssl_required)
+        config = _config_from_url(database_url, conn_max_age, atomic_requests, ssl_required) or {}
+        _ensure_connect_timeout(config, connect_timeout)
         return {"default": config}
 
     host = (env.get("DB_HOST") or "").strip()
@@ -93,11 +113,13 @@ def build_database_settings(base_dir: Path, env: Mapping[str, str] | None = None
             conn_max_age=conn_max_age,
             atomic_requests=atomic_requests,
         )
+        _ensure_connect_timeout(config, connect_timeout)
         return {"default": config}
 
     fallback_url = (env.get("FALLBACK_DATABASE_URL") or "").strip()
     if fallback_url:
         config = _config_from_url(fallback_url, conn_max_age, atomic_requests, ssl_required)
+        _ensure_connect_timeout(config, connect_timeout)
         return {"default": config}
 
     sqlite_path = base_dir / "db.sqlite3"

@@ -112,6 +112,8 @@ INSTALLED_APPS = [
     "ai_assistants.apps.AiAssistantsConfig",  # ← AJOUT
     "overall_context",  # ← (optionnel) si tu l’emploies
     "api",
+    # mcp server
+    "mcp_server",
 ]
 
 
@@ -159,6 +161,24 @@ REST_FRAMEWORK = {
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
+# ──────────────────────────────────────────────────────────────────────────────
+# MCP Server (django-mcp-server)
+# ──────────────────────────────────────────────────────────────────────────────
+DJANGO_MCP_ENDPOINT = os.getenv("DJANGO_MCP_ENDPOINT", "mcp")
+DJANGO_MCP_GLOBAL_SERVER_CONFIG = {
+    "name": os.getenv("DJANGO_MCP_NAME", "pxp-mcp"),
+}
+DJANGO_MCP_OUTPUT_RENDERER_CLASSES = [
+    "rest_framework.renderers.JSONRenderer",
+]
+# Si DJANGO_MCP_AUTHENTICATION_CLASSES n'est pas défini dans l'env,
+# on sécurise par défaut avec Session + JWT.
+DJANGO_MCP_AUTHENTICATION_CLASSES = _env_list("DJANGO_MCP_AUTHENTICATION_CLASSES", []) or [
+    "rest_framework.authentication.SessionAuthentication",
+    "rest_framework_simplejwt.authentication.JWTAuthentication",
+]
+DJANGO_MCP_GET_SERVER_INSTRUCTIONS_TOOL = env_bool("DJANGO_MCP_GET_SERVER_INSTRUCTIONS_TOOL", True)
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -279,6 +299,16 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = str(BASE_DIR / "media")
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Email (dev-friendly defaults; override via env in prod)
+# ──────────────────────────────────────────────────────────────────────────────
+if APP_ENV != "prod":
+    EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+    DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@pixelprowlers.local")
+else:
+    EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+    DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@pixelprowlers.io")
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Sécurité prod + cookies
 # ──────────────────────────────────────────────────────────────────────────────
 if APP_ENV == "prod":
@@ -313,6 +343,9 @@ if "corsheaders" in INSTALLED_APPS:
 # ──────────────────────────────────────────────────────────────────────────────
 SESSION_COOKIE_SAMESITE = os.getenv("SESSION_COOKIE_SAMESITE", "Lax")
 CSRF_COOKIE_SAMESITE = os.getenv("CSRF_COOKIE_SAMESITE", "Lax")
+# En dev comme en prod: cookies HttpOnly pour limiter l'exposition côté client
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = True
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Logging console

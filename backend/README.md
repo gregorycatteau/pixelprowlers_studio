@@ -78,3 +78,32 @@ docker/
 - Variables d’environnement: .env (commun) + .env.<APP_ENV> (dev/test/prod/upgrade)
 
 Bon build et bonne chasse aux pixels 🐾
+
+## Mode non‑interactif (Cline/CI)
+
+Objectif: exécuter des commandes Django/Poetry sans interaction, avec sorties flushées et fin détectable par un marqueur.
+
+- Script: `scripts/run-ni.sh` (ajoute timeout, force le mode non‑interactif, imprime une sentinelle de fin)
+- Sentinelle de fin imprimée: `[[CLINE:DONE]]`
+- Environnement forcé: `PYTHONUNBUFFERED=1`, `POETRY_FORCE_INTERACTIVE=no`
+- Timeout par défaut: 120s (overridable avec `-t` ou `TIMEOUT=...`)
+- Connexion DB: `DB_CONNECT_TIMEOUT` (défaut 5s) pour éviter les hangs si PostgreSQL est indisponible
+- Superuser: variables `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_EMAIL`, `DJANGO_SUPERUSER_PASSWORD` (non loguées)
+
+Exemples:
+
+- Initialiser l’environnement dev (non‑interactif)
+  bash
+  bash scripts/run-ni.sh -C backend -t 120 -- poetry run python -u manage.py init_dev_env --noinput
+
+- Variante si une commande pose des questions (piping “yes”)
+  bash
+  bash scripts/run-ni.sh -C backend -t 120 --yes -- poetry run python -u manage.py <commande>
+
+- Lancer un serveur de manière détachée (logs redirigés)
+  bash
+  bash scripts/run-ni.sh -C backend --detach /tmp/django.out -- poetry run python -u manage.py runserver 127.0.0.1:8000
+
+Notes:
+- La commande `init_dev_env` supporte `--noinput` et lit les variables `DJANGO_SUPERUSER_*`.
+- Le script imprime systématiquement `[[CLINE:DONE]] exit=<code>` (ou `pid=<pid>` en mode détaché) pour que Cline détecte la fin proprement.

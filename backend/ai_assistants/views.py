@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import time
+import uuid
 from hashlib import sha256
 from types import SimpleNamespace
 from typing import Any, Dict, Optional
@@ -15,6 +16,7 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.cache import cache
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.utils import timezone
 from django.utils.text import slugify
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_GET, require_POST
@@ -116,6 +118,58 @@ def _get_agent_by_slug_or_name(slug: str) -> Optional[AgentProfile]:
         if slugify(a.name) == slug:
             return a
     return None
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 📦 Logs chain & Events helpers (Sprint 00)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _uuid7() -> str:
+    try:
+        u = getattr(uuid, "uuid7", None)
+        if callable(u):
+            return str(u())
+    except Exception:
+        pass
+    return str(uuid.uuid4())
+
+
+def _now_iso() -> str:
+    try:
+        return timezone.now().isoformat()
+    except Exception:
+        import datetime as _dt
+
+        return _dt.datetime.utcnow().replace(tzinfo=_dt.timezone.utc).isoformat()
+
+
+def _append_log_entry(correlation_id: str, entry: Dict[str, Any]) -> Dict[str, Any]:
+    key = f"logs:{correlation_id}"
+    items = cache.get(key) or []
+    prev_hash = items[-1].get("hash_curr") if items else ""
+    payload = {"server_ts": _now_iso(), **entry}
+    h = sha256(
+        json.dumps(payload, sort_keys=True).encode("utf-8") + prev_hash.encode("utf-8")
+    ).hexdigest()
+    item = {"hash_prev": prev_hash, "hash_curr": h, "entry": payload}
+    items.append(item)
+    cache.set(key, items, timeout=90 * 24 * 3600)  # keep 90 days per baseline
+    return item
+
+
+def _emit_event(
+    correlation_id: str, base: Dict[str, Any], event_type: str, payload: Dict[str, Any]
+) -> Dict[str, Any]:
+    event = {
+        "type": event_type,
+        "events_version": "1.0.0",
+        "ts": _now_iso(),
+        "server_ts": _now_iso(),
+        **base,
+        "payload": payload,
+    }
+    return _append_log_entry(correlation_id, {"event": event})
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -409,8 +463,8 @@ def api_list_agents(request: HttpRequest) -> JsonResponse:
 def api_ask_agent(request: HttpRequest, slug: str) -> JsonResponse:
     """
     POST /api/agents/<slug>/ask
-    Body: { "message": "..." }
-    Pour l’instant → MOCK (echo).
+    Body: { "message": "..." , "thread_id"?: "...", "idempotency_key"?: "uuidv7" }
+    Mock secure echo with Sprint 00 gates: throttle, nonce, idempotency, EVENTS v1 logs.
     """
     throttle = AskAgentThrottle()
     throttle_view = SimpleNamespace(throttle_scope=AskAgentThrottle.scope)
@@ -426,6 +480,16 @@ def api_ask_agent(request: HttpRequest, slug: str) -> JsonResponse:
         RequestNonce.validate(raw_nonce, getattr(request.user, "pk", None))
     except NonceError as exc:
         return JsonResponse({"ok": False, "agent": slug, "error": exc.code}, status=400)
+
+    # Anti-replay window (60s)
+    ts_hdr = request.META.get("HTTP_X_TIMESTAMP") or ""
+    try:
+        ts_int = int(ts_hdr)
+    except Exception:
+        return JsonResponse({"ok": False, "agent": slug, "error": "bad_timestamp"}, status=400)
+    now = int(time.time())
+    if abs(now - ts_int) > 60:
+        return JsonResponse({"ok": False, "agent": slug, "error": "timestamp_skew"}, status=401)
 
     agent = _get_agent_by_slug_or_name(slug)
     if not agent:
@@ -445,6 +509,17 @@ def api_ask_agent(request: HttpRequest, slug: str) -> JsonResponse:
             status=400,
         )
 
+    # Correlation / Idempotency
+    correlation_id = getattr(request, "correlation_id", None) or _uuid7()
+    idem_key = getattr(request, "idempotency_key", None)
+    user_id = getattr(request.user, "pk", None)
+    if idem_key:
+        idem_cache_key = f"idemp:ask:{user_id}:{idem_key}"
+        cached_resp = cache.get(idem_cache_key)
+        if cached_resp:
+            return JsonResponse(cached_resp, status=200)
+
+    # Perform mock processing
     t0 = time.time()
     output = f"[{agent.name}] Echo sécurisé : {message}"
     latency_ms = int((time.time() - t0) * 1000)
@@ -457,6 +532,47 @@ def api_ask_agent(request: HttpRequest, slug: str) -> JsonResponse:
         len(message.split()),
     )
 
+    # EVENTS v1 emission (user_message + 2+ agent_stream chunks)
+    base = {
+        "actor": {
+            "id": str(user_id) if user_id is not None else "",
+            "kind": "user",
+            "role": (
+                "superuser"
+                if getattr(request.user, "is_superuser", False)
+                else ("ops" if getattr(request.user, "is_staff", False) else "agent")
+            ),
+            "display_name": getattr(request.user, "username", ""),
+        },
+        "thread_id": (data.get("thread_id") or "") or str(uuid.uuid4()),
+        "correlation_id": correlation_id,
+        "trace_id": _uuid7(),
+        "span_id": str(uuid.uuid4()),
+    }
+    _emit_event(
+        correlation_id,
+        base,
+        "chat:user_message",
+        {"message": message, "content_type": "text/plain", "tokens": len(message.split())},
+    )
+
+    # Split output into at least 2 chunks
+    mid = max(1, len(output) // 2)
+    chunks = [output[:mid], output[mid:]]
+    for idx, chunk in enumerate(chunks):
+        _emit_event(
+            correlation_id,
+            base,
+            "chat:agent_stream",
+            {
+                "chunk": chunk,
+                "chunk_index": idx,
+                "final": idx == (len(chunks) - 1),
+                "latency_ms": latency_ms,
+                "model": "mock://echo",
+            },
+        )
+
     resp = {
         "ok": True,
         "agent": agent.slug or slugify(agent.name),
@@ -467,8 +583,71 @@ def api_ask_agent(request: HttpRequest, slug: str) -> JsonResponse:
         "tokens_out": len(output.split()),
         "cost_eur": 0.0,
         "latency_ms": latency_ms,
+        "correlation_id": correlation_id,
     }
+
+    if idem_key:
+        cache.set(idem_cache_key, resp, timeout=120)
+
     return JsonResponse(resp, status=200)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 📜 Logs (RBAC read: superuser|ops)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@require_GET
+@login_required
+@user_passes_test(
+    lambda u: bool(getattr(u, "is_superuser", False) or getattr(u, "is_staff", False))
+)
+def api_logs_by_correlation(request: HttpRequest) -> JsonResponse:
+    """
+    GET /api/logs?correlation_id=...
+    RBAC: superuser|ops (is_staff) only. Returns tamper-evident chain for the correlation id.
+    """
+    cid = (request.GET.get("correlation_id") or "").strip()
+    if not cid:
+        return JsonResponse({"ok": False, "error": "correlation_id_required"}, status=400)
+
+    key = f"logs:{cid}"
+    items = cache.get(key) or []
+
+    # PII masks
+    ip = (request.META.get("REMOTE_ADDR") or "").strip()
+
+    def _mask_ip(addr: str) -> str:
+        # simple /24 for IPv4 and basic masking for IPv6
+        if ":" in addr:
+            parts = addr.split(":")
+            # keep first 3 hextets, mask the rest
+            return ":".join(parts[:3] + ["*"] * max(0, len(parts) - 3)) if parts else ""
+        else:
+            parts = addr.split(".")
+            return ".".join(parts[:3] + ["0"]) if len(parts) == 4 else ""
+
+    ua = (request.META.get("HTTP_USER_AGENT") or "").lower()
+    ua_family = "unknown"
+    if "chrome" in ua:
+        ua_family = "chrome"
+    elif "firefox" in ua:
+        ua_family = "firefox"
+    elif "safari" in ua and "chrome" not in ua:
+        ua_family = "safari"
+    elif "curl" in ua:
+        ua_family = "curl"
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "correlation_id": cid,
+            "ip_mask": _mask_ip(ip),
+            "ua_family": ua_family,
+            "entries": items,
+        },
+        status=200,
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────

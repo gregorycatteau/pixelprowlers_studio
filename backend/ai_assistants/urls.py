@@ -23,5 +23,7 @@ urlpatterns = [
     ),
     # Agents
     path("agents/<slug:slug>/ask", views.api_ask_agent, name="api_ask_agent"),
+    # Logs
+    path("logs", views.api_logs_by_correlation, name="api_logs_by_correlation"),
     path("", include(router.urls)),
 ]
