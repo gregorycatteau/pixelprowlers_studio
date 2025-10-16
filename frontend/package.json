@@ -10,6 +10,9 @@
     "dev:back": "cross-env APP_ENV=dev DJANGO_SETTINGS_MODULE=studio_core.settings.dev sh -c \"cd ../backend && poetry run python manage.py runserver 0.0.0.0:8000\"",
     "dev:all": "concurrently -k \"npm:dev:back\" \"npm:dev\"",
     "dev:bootstrap": "cross-env APP_ENV=dev DJANGO_SETTINGS_MODULE=studio_core.settings.dev sh -c \"cd ../backend && poetry run python ../scripts/bootstrap_e2e.py\"",
+    "dev:test:back": "cross-env APP_ENV=test DJANGO_SETTINGS_MODULE=studio_core.settings.base sh -c \"cd ../backend && poetry run python manage.py runserver 0.0.0.0:8100\"",
+    "dev:test:front": "cross-env APP_ENV=test NUXT_PUBLIC_APP_ENV=test NUXT_PORT=3100 PORT=3100 nuxt dev",
+    "dev:all:test": "concurrently -k \"npm:dev:test:back\" \"npm:dev:test:front\"",
     "build": "nuxt build",
     "start": "node .output/server/index.mjs",
     "generate": "nuxt generate",
@@ -24,6 +27,9 @@
     "test:run": "vitest --run",
     "test:e2e": "npx playwright test",
     "test:e2e:headed": "PWDEBUG=1 npm run test:e2e",
+    "test:e2e:report": "npx playwright show-report",
+    "pw:clean": "sh -c \"rm -rf playwright-report test-results reports blob-report || true\"",
+    "pw:docker:run": "sh -c \"docker compose -f ../docker-compose.playwright.yml run --rm -e PPW_BASE_URL=${PPW_BASE_URL:-http://127.0.0.1:3100} -e PPW_BACKEND_HEALTH_URL=${PPW_BACKEND_HEALTH_URL:-http://127.0.0.1:8100/ready/} -e PW_SKIP_WEBSERVER=1 playwright\"",
     "playwright:install": "npx playwright install --with-deps"
   },
   "dependencies": {

@@ -18,6 +18,7 @@ from .auth import (
     LogoutCookieView,
     RefreshCookieView,
     WhoAmIView,
+    api_auth_eotp_peek,
     api_auth_eotp_resend,
     api_auth_eotp_verify,
     api_auth_login,
@@ -48,6 +49,7 @@ urlpatterns = [
     path("auth/totp/verify/", api_auth_totp_verify, name="auth_totp_verify"),
     path("auth/2fa/email/verify/", api_auth_eotp_verify, name="auth_eotp_verify"),
     path("auth/2fa/email/resend/", api_auth_eotp_resend, name="auth_eotp_resend"),
+    path("auth/2fa/email/_peek/", api_auth_eotp_peek, name="auth_eotp_peek"),
     path(
         "auth/totp/recovery/export/",
         api_auth_totp_recovery_export,

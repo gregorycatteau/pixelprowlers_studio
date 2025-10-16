@@ -66,3 +66,43 @@ dev:
 
 smoke:
 	cd docs/auth && BASE_URL=$${BASE_URL:-http://localhost:8000} bash smoke-dojo.http
+
+# ──────────────────────────────────────────────────────────────────────────────
+# E2E Playwright targets (test env separation)
+#  - Frontend test port: 3100
+#  - Backend test port: 8100
+#  - By default, Playwright webServer will spawn these via npm scripts
+#  - Set PW_SKIP_WEBSERVER=1 to attach to already running services
+# ──────────────────────────────────────────────────────────────────────────────
+PW_BASE_URL ?= http://127.0.0.1:3100
+PW_BACKEND_HEALTH_URL ?= http://127.0.0.1:8100/ready/
+
+.PHONY: test-e2e pw-report pw-open-report pw-clean pw-docker-run test-env-up test-env-down pw-doctor
+
+test-e2e:
+	cd frontend && PPW_BASE_URL=$(PW_BASE_URL) PPW_BACKEND_HEALTH_URL=$(PW_BACKEND_HEALTH_URL) npx playwright test
+
+pw-report:
+	cd frontend && npx playwright show-report
+
+pw-open-report: pw-report
+
+pw-clean:
+	rm -rf frontend/playwright-report frontend/test-results frontend/reports frontend/blob-report || true
+
+# Run E2E inside official Playwright container (recommended on Kali)
+pw-docker-run:
+	PPW_BASE_URL=$(PW_BASE_URL) PPW_BACKEND_HEALTH_URL=$(PW_BACKEND_HEALTH_URL) docker compose -f docker-compose.playwright.yml run --rm \
+		-e PPW_BASE_URL -e PPW_BACKEND_HEALTH_URL -e PW_SKIP_WEBSERVER=1 playwright
+
+# Optional helpers if you choose to pre-start the test stack manually
+test-env-up:
+	@echo "INFO: Playwright will start the test servers unless PW_SKIP_WEBSERVER=1 is set."
+	@echo "INFO: To start manually, run:  cd frontend && npm run dev:all:test"
+
+test-env-down:
+	@echo "INFO: Stop any manually started test servers if you launched them yourself."
+	@echo "INFO: No docker-compose.test.yml defined yet for a multi-service test stack."
+
+pw-doctor:
+	cd frontend && npx playwright install --with-deps && npx playwright --version

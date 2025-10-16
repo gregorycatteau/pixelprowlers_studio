@@ -250,6 +250,12 @@ def _eotp_issue(request, user) -> dict:
         "last_sent": now,
         "user_id": getattr(user, "pk", None),
     }
+    # Test-only peek (APP_ENV=test): store plaintext code for E2E flow
+    try:
+        if getattr(settings, "APP_ENV", "") == "test":
+            state["peek_code"] = code
+    except Exception:
+        pass
     _eotp_state_set(request, state, ttl=_EOTP_TTL)
 
     # Dev log of the OTP in non-prod or when EOTP_DEV_LOG is enabled (do not enable in prod)
@@ -1256,6 +1262,31 @@ def api_auth_eotp_resend(request):
     return JsonResponse(
         {"ok": True, "retry_after": _EOTP_COOLDOWN, "expires_in": remaining}, status=200
     )
+
+
+@require_POST
+@csrf_exempt
+def api_auth_eotp_peek(request):
+    """
+    POST /api/auth/2fa/email/_peek/  (TEST ONLY)
+    Returns the current E-OTP code for E2E tests when APP_ENV=test and a pending_2fa_user is present.
+    Never enabled in production.
+    """
+    # Guard: only in test environment
+    if getattr(settings, "APP_ENV", "") != "test":
+        return JsonResponse({"ok": False, "error": "not_allowed"}, status=403)
+
+    # Require a pending_2fa_user in session
+    user_id = request.session.get("pending_2fa_user")
+    if not user_id:
+        return JsonResponse({"ok": False, "error": "invalid_state"}, status=400)
+
+    state = _eotp_state_get(request) or {}
+    code = state.get("peek_code")
+    if not code:
+        return JsonResponse({"ok": False, "error": "unavailable"}, status=404)
+
+    return JsonResponse({"ok": True, "code": str(code)}, status=200)
 
 
 def _hash_recovery_code(user, code: str) -> str:
