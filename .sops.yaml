@@ -1,0 +1,5 @@
+creation_rules:
+  - path_regex: ops/secret/dev/.*
+    encrypted_regex: .*
+    age:
+      - age1m8snpn7vtzaackxnalftlx0vhujv3ujk9qr38gcp5py92ate6qnqzanyxz

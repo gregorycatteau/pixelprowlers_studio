@@ -1,0 +1,61 @@
+version: "3.9"
+
+# PixelProwlers Studio — mTLS Harness (Caddy + Django Dojo)
+# Usage:
+#   docker compose -f config/mTLS/docker-compose.mtls.yml up -d --build
+#   # Then run your mTLS tests (see scripts/test_mtls.sh in the repo)
+#
+# Layout (relative to this compose file):
+#   - ../Caddyfile                    → mounts to /etc/caddy/Caddyfile
+#   - ./certs/                        → mounts to /etc/caddy
+#       ca_admin_clients.pem          → CA cert used to validate client certificates (mTLS)
+#       client-valid.pem / .key       → valid client certificate + private key (for curl tests)
+#       client-invalid.pem / .key     → invalid client certificate + private key (for curl tests)
+#
+# Notes:
+# - This harness maps Caddy’s 443 to localhost:8443. The Caddyfile must define
+#   the Dojo vhost with client_auth and trusted_ca_cert_file=/etc/caddy/ca_admin_clients.pem.
+# - The Django Dojo service expects a Dockerfile under ../../backend that launches the server
+#   (e.g., gunicorn or manage.py runserver). Adjust to your setup.
+
+services:
+  caddy:
+    image: caddy:2.8
+    container_name: mtls_caddy
+    restart: unless-stopped
+    environment:
+      # Backend upstream (used by Caddyfile via {$DJANGO_DOJO_UPSTREAM})
+      - DJANGO_DOJO_UPSTREAM=django_dojo:8000
+    ports:
+      - "8443:443"
+    depends_on:
+      - django_dojo
+    # Mount the Caddyfile and the mTLS CA/certs bundle (read-only)
+    volumes:
+      - ../Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/etc/caddy:ro
+    networks:
+      - mtls
+
+  django_dojo:
+    # Expect a Dockerfile at ../../backend that starts Django Dojo (realm: admins)
+    build:
+      context: ../../backend
+      # dockerfile: Dockerfile   # Uncomment and set if your Dockerfile has a custom name
+    container_name: mtls_django_dojo
+    restart: unless-stopped
+    environment:
+      - DJANGO_SETTINGS_MODULE=studio_core.settings.realms.dojo
+      # Keep hosts permissive for local harness; refine as needed.
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,dojo.local,dojo.pixelprowlers.studio
+      - DJANGO_CSRF_TRUSTED_ORIGINS=https://localhost:8443
+      # Behind reverse proxy inside compose; disable internal redirect here.
+      - SECURE_SSL_REDIRECT=false
+    expose:
+      - "8000"
+    networks:
+      - mtls
+
+networks:
+  mtls:
+    driver: bridge

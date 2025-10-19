@@ -7,7 +7,16 @@ from decimal import Decimal
 from django.contrib import admin, messages
 from django.utils.html import format_html
 
-from .models import AgentProfile, AgentRun, AgentToolCall, DailyBudget
+from .models import (
+    AgentProfile,
+    AgentRun,
+    AgentToolCall,
+    Conversation,
+    ConversationAuditLog,
+    ConversationMessage,
+    DailyBudget,
+    DojoAgent,
+)
 from .utils.agent_schema import compute_manifest_hash, validate_agent_profile
 
 # ============================================================================
@@ -369,3 +378,57 @@ class DailyBudgetAdmin(admin.ModelAdmin):
         return format_html("<b style='color:{}'>{}</b>", color, label)
 
     over_cap_badge.short_description = "Budget"
+
+
+# ============================================================================
+# Dojo Conversations (read-only)
+# ============================================================================
+
+
+@admin.register(DojoAgent)
+class DojoAgentAdmin(admin.ModelAdmin):
+    list_display = ("slug", "title", "is_active", "updated_at")
+    list_filter = ("is_active",)
+    search_fields = ("slug", "title")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(Conversation)
+class ConversationAdmin(admin.ModelAdmin):
+    list_display = ("id", "agent", "creator", "status", "created_at", "updated_at")
+    list_filter = ("status", "agent")
+    search_fields = ("id", "title", "creator__username", "agent__slug")
+    readonly_fields = ("meta", "created_at", "updated_at")
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related("agent", "creator")
+
+
+@admin.register(ConversationMessage)
+class ConversationMessageAdmin(admin.ModelAdmin):
+    list_display = ("id", "conversation", "role", "created_at")
+    list_filter = ("role",)
+    search_fields = ("id", "conversation__id", "content")
+    readonly_fields = ("conversation", "role", "content", "tokens", "meta", "created_at")
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related("conversation", "conversation__agent")
+
+
+@admin.register(ConversationAuditLog)
+class ConversationAuditLogAdmin(admin.ModelAdmin):
+    list_display = ("created_at", "action", "object_type", "object_id", "actor")
+    list_filter = ("action", "object_type")
+    search_fields = ("object_id", "actor__username", "ip_address", "action")
+    readonly_fields = (
+        "actor",
+        "action",
+        "object_type",
+        "object_id",
+        "ip_address",
+        "user_agent",
+        "extra",
+        "created_at",
+    )

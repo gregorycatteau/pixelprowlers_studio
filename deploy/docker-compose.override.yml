@@ -1,0 +1,39 @@
+services:
+  backend:
+    environment:
+      EVENTS_HMAC_SECRET_FILE: /run/ppw-secrets/events_gateway.hmac.key
+    volumes:
+      - type: bind
+        source: ../ops/secret/dev/events_gateway.hmac.key.dec
+        target: /run/ppw-secrets/events_gateway.hmac.key
+        read_only: true
+
+  backend_consumer:
+    environment:
+      EVENTS_HMAC_SECRET_FILE: /run/ppw-secrets/events_gateway.hmac.key
+    volumes:
+      - type: bind
+        source: ../ops/secret/dev/events_gateway.hmac.key.dec
+        target: /run/ppw-secrets/events_gateway.hmac.key
+        read_only: true
+  n8n:
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:5678/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  nats:
+    image: nats:2
+    command: ["-js", "-m", "8222", "--http_port", "8222", "--server_name=pxp_nats"]
+    restart: unless-stopped
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  nats_data:

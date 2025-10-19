@@ -1,0 +1,122 @@
+{
+  # Local development: disable auto HTTPS.
+  auto_https off
+
+  # (Optional) JSON global logging (can be overridden per site)
+  # logs {
+  #   default_logger {
+  #     level INFO
+  #     format json
+  #     output stdout
+  #   }
+  # }
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Reusable snippets
+# ──────────────────────────────────────────────────────────────────────────────
+
+(json_access_log) {
+  log {
+    output stdout
+    format json
+  }
+}
+
+# (No request_id handler in base Caddy image)
+# X-Request-ID propagation will rely on upstreams (Nuxt/Django) for now.
+# We still forward any client-provided X-Request-ID header to upstreams.
+(request_id_passthrough) {
+  @has_xrid header X-Request-ID *
+  header {
+    defer
+    # Keep any incoming X-Request-ID so reverse_proxy can forward it upstream
+    # (no mutation here to avoid unsupported directives)
+  }
+}
+
+# Baseline security headers for local HTTP.
+# - HSTS is not enforced over HTTP; CSP is set in Report-Only for day-0.
+(security_headers) {
+  header {
+    # Remove Server header
+    -Server
+
+    # Baseline hardening
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "strict-origin-when-cross-origin"
+
+    # Content Security Policy (Report-Only for local)
+    # Adjust per app and evolve to "enforce" once stable.
+    Content-Security-Policy-Report-Only "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+
+    # Optional report endpoint (implement /api/csp-report on your app if desired)
+    # Report-To "{\"group\":\"csp-endpoint\",\"max_age\":10886400,\"endpoints\":[{\"url\":\"/api/csp-report\"}]}"
+
+    # Note: HSTS is meaningful over HTTPS; keep commented in local HTTP.
+    # Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+  }
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Sites — Local routing
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Frontend (Nuxt) — http://dev.localhost → {$NUXT_UPSTREAM}
+dev.localhost, https://dev.localhost {
+  import json_access_log
+  import security_headers
+  tls /etc/caddy/certs/dev.localhost.crt /etc/caddy/certs/dev.localhost.key
+
+  @all {
+    path *
+  }
+
+  route {
+    reverse_proxy {$NUXT_UPSTREAM} {
+      # Forward any incoming correlation ID upstream (if present)
+      header_up X-Request-ID {http.request.header.X-Request-ID}
+    }
+  }
+}
+
+# Backend (Django/DRF) — http://api.dev.localhost → {$DJANGO_UPSTREAM}
+api.dev.localhost, https://api.dev.localhost {
+  import json_access_log
+  import security_headers
+  tls /etc/caddy/certs/api.dev.localhost.crt /etc/caddy/certs/api.dev.localhost.key
+
+  route {
+    reverse_proxy {$DJANGO_UPSTREAM} {
+      header_up X-Request-ID {http.request.header.X-Request-ID}
+    }
+  }
+}
+
+# Orchestrator (n8n) — http://n8n.dev.localhost → {$N8N_UPSTREAM}
+n8n.dev.localhost, https://n8n.dev.localhost {
+  import json_access_log
+  import security_headers
+  tls /etc/caddy/certs/n8n.dev.localhost.crt /etc/caddy/certs/n8n.dev.localhost.key
+
+  route {
+    reverse_proxy {$N8N_UPSTREAM} {
+      header_up X-Request-ID {http.request.header.X-Request-ID}
+    }
+  }
+}
+
+# NATS monitoring (JetStream) — http://nats.dev.localhost → {$NATS_MONITORING}
+# Note: Expose only locally; do not expose in production.
+nats.dev.localhost, https://nats.dev.localhost {
+  import json_access_log
+  import security_headers
+  tls /etc/caddy/certs/nats.dev.localhost.crt /etc/caddy/certs/nats.dev.localhost.key
+
+  route {
+    reverse_proxy {$NATS_MONITORING} {
+      header_up X-Request-ID {http.request.header.X-Request-ID}
+    }
+  }
+}

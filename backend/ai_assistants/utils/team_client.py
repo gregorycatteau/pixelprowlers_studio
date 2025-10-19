@@ -17,6 +17,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # 📥 Fonctions de cache pour manifeste, profil agent et contexte
 from .context_cache import get_cached_agent_context, get_cached_agent_profile, get_cached_manifest
+from .registry import get_assistant_id_from_registry
 
 
 # 🔁 Récupération de l'ID OpenAI d’un agent depuis .env
@@ -26,9 +27,13 @@ def get_agent_id(agent_name: str) -> str:
     """
     var_name = f"{agent_name.upper()}_ASSISTANT_ID"
     assistant_id = os.getenv(var_name)
-    if not assistant_id:
-        raise ValueError(f"Assistant ID non trouvé pour l'agent : {agent_name}")
-    return assistant_id
+    if assistant_id:
+        return assistant_id
+
+    fallback_id = get_assistant_id_from_registry(agent_name)
+    if fallback_id:
+        return fallback_id
+    raise ValueError(f"Assistant ID non trouvé pour l'agent : {agent_name}")
 
 
 # 🧠 Fonction principale : appel à l’agent

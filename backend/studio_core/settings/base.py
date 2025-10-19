@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Django settings for studio_core project.
 Base agnostique d'environnement avec chargement .env et fallback sûrs.
@@ -5,6 +6,7 @@ Base agnostique d'environnement avec chargement .env et fallback sûrs.
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import timedelta
 from pathlib import Path
@@ -24,6 +26,8 @@ else:
 # ──────────────────────────────────────────────────────────────────────────────
 # Chargement .env (commun + spécifique à APP_ENV)
 # ──────────────────────────────────────────────────────────────────────────────
+CLI_ENV = os.environ.copy()
+
 try:
     import environ  # type: ignore
 except Exception:
@@ -51,6 +55,9 @@ _read_env_file(BASE_DIR / ".env", overwrite=False)
 # .env spécifique (peut redéfinir APP_ENV & co)
 APP_ENV = os.getenv("APP_ENV", APP_ENV).strip().lower()
 _read_env_file(BASE_DIR / f".env.{APP_ENV}", overwrite=True)
+
+MERGED_ENV = dict(os.environ)
+MERGED_ENV.update(CLI_ENV)
 
 
 def _env_list(key: str, default: List[str] | None = None) -> List[str]:
@@ -105,15 +112,11 @@ INSTALLED_APPS = [
     "accounts.apps.AccountsConfig",
     "ai_assistants.apps.AiAssistantsConfig",  # ← AJOUT
     "overall_context",  # ← (optionnel) si tu l’emploies
+    "api",
+    "eotp.apps.EotpConfig",
+    # NOTE: ne pas ajouter "mcp_server" ici si tu utilises l'option ASGI django-mcp.
+    # Le serveur MCP est monté dans ASGI (studio_core/asgi.py) et ne nécessite PAS d'app Django.
 ]
-
-# Optionally include API app skeleton if present (safe import)
-try:
-    import api  # type: ignore  # noqa: F401
-
-    INSTALLED_APPS.append("api")
-except Exception:
-    pass
 
 # CORS (si présent)
 try:
@@ -133,6 +136,72 @@ try:
 except Exception:
     _HAS_RATELIMIT = False
 
+# DRF — OpenAPI schema via drf-spectacular
+REST_FRAMEWORK = {
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": os.getenv("DRF_THROTTLE_ANON", "30/min"),
+        "user": os.getenv("DRF_THROTTLE_USER", "120/min"),
+        "jwt_obtain": os.getenv("DRF_THROTTLE_JWT_OBTAIN", "10/min"),
+        "jwt_refresh": os.getenv("DRF_THROTTLE_JWT_REFRESH", "30/min"),
+        "jwt_verify": os.getenv("DRF_THROTTLE_JWT_VERIFY", "60/min"),
+        "ask_agent": os.getenv("DRF_THROTTLE_ASK_AGENT", "5/min"),
+        "conversations_create": os.getenv("DRF_THROTTLE_CONV_CREATE", "5/min"),
+        "messages_create": os.getenv("DRF_THROTTLE_MSG_CREATE", "30/min"),
+    },
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# MCP Server (section héritée)
+# ──────────────────────────────────────────────────────────────────────────────
+# NOTE :
+# - Si tu utilises l’option ASGI via 'django-mcp' (recommandée), ces variables ne sont pas requises.
+# - On les laisse en place si tu souhaites expérimenter 'django-mcp-server' plus tard.
+DJANGO_MCP_ENDPOINT = os.getenv("DJANGO_MCP_ENDPOINT", "mcp")
+DJANGO_MCP_GLOBAL_SERVER_CONFIG = {
+    "name": os.getenv("DJANGO_MCP_NAME", "pxp-mcp"),
+}
+DJANGO_MCP_OUTPUT_RENDERER_CLASSES = [
+    "rest_framework.renderers.JSONRenderer",
+]
+DJANGO_MCP_AUTHENTICATION_CLASSES = _env_list("DJANGO_MCP_AUTHENTICATION_CLASSES", []) or [
+    "rest_framework.authentication.SessionAuthentication",
+    "rest_framework_simplejwt.authentication.JWTAuthentication",
+]
+DJANGO_MCP_GET_SERVER_INSTRUCTIONS_TOOL = env_bool("DJANGO_MCP_GET_SERVER_INSTRUCTIONS_TOOL", True)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# MCP (Option A — ASGI via django-mcp)
+# Ces variables sont requises par django_mcp.mount_mcp_server même si 'django_mcp'
+# n'est PAS ajouté à INSTALLED_APPS.
+# ──────────────────────────────────────────────────────────────────────────────
+MCP_SERVER_TITLE = os.getenv("MCP_SERVER_TITLE", "django-pixelprowlers")
+MCP_SERVER_INSTRUCTIONS = os.getenv(
+    "MCP_SERVER_INSTRUCTIONS", "Provides MCP tools for PixelProwlers Studio"
+)
+MCP_SERVER_VERSION = os.getenv("MCP_SERVER_VERSION", "0.1.0")
+MCP_DIRS: List[str] = _env_list("MCP_DIRS", default=[])
+
+# Journalisation et sécurité (valeurs par défaut si 'django_mcp' n'est pas dans INSTALLED_APPS)
+MCP_LOG_LEVEL = os.getenv("MCP_LOG_LEVEL", "INFO")
+MCP_LOG_TOOL_REGISTRATION = env_bool("MCP_LOG_TOOL_REGISTRATION", True)
+MCP_LOG_TOOL_DESCRIPTIONS = env_bool("MCP_LOG_TOOL_DESCRIPTIONS", False)
+MCP_LOG_HTTP_HEADERS_ON_SSE_CONNECT = env_bool("MCP_LOG_HTTP_HEADERS_ON_SSE_CONNECT", False)
+# Clé utilisée par django_mcp pour signer/chiffrer si nécessaire; fallback sur SECRET_KEY
+MCP_SECRET_KEY = os.getenv("MCP_SECRET_KEY", SECRET_KEY)
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -143,6 +212,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "studio_core.middleware.SecurityHeadersMiddleware",
     # 🔎 Request-ID + Audit JWT (IP, UA, jti, scopes…)
     "accounts.middleware.RequestIDAndAuditMiddleware",
     "studio_core.api_auth_middleware.ApiAuthRedirectTo401Middleware",
@@ -168,59 +238,19 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "studio_core.wsgi.application"
+ASGI_APPLICATION = "studio_core.asgi.application"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # DB (DATABASE_URL → dict) avec fallback SQLite sécurisé
 # ──────────────────────────────────────────────────────────────────────────────
-from dj_database_url import config as dj_db_config  # type: ignore
+from studio_core.dbconf import build_database_settings, describe_db_connection
 
-_database_url = (os.getenv("DATABASE_URL") or "").strip()
-
-
-def _build_db_config() -> dict:
-    """Construit DATABASES['default'] depuis DATABASE_URL, fallback SQLite si besoin."""
-    ssl_req = APP_ENV == "prod"
-    db: dict = {}
-    if _database_url:
-        try:
-            db = dj_db_config(default=_database_url, conn_max_age=60, ssl_require=ssl_req) or {}
-        except Exception:
-            db = {}
-    if not db or "ENGINE" not in db:
-        db = {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": str(BASE_DIR / "db.sqlite3"),
-        }
-    return db
-
-
-DATABASES = {"default": _build_db_config()}
+DATABASES = build_database_settings(BASE_DIR, MERGED_ENV)
+DB_CONNECTION_LABEL = describe_db_connection(DATABASES["default"])
 
 # ──────────────────────────────────────────────────────────────────────────────
 # DRF — JWT + Throttling
 # ──────────────────────────────────────────────────────────────────────────────
-REST_FRAMEWORK = {
-    "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
-    ],
-    "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
-    ],
-    "DEFAULT_THROTTLE_CLASSES": [
-        "rest_framework.throttling.AnonRateThrottle",
-        "rest_framework.throttling.UserRateThrottle",
-        "rest_framework.throttling.ScopedRateThrottle",
-    ],
-    "DEFAULT_THROTTLE_RATES": {
-        "anon": os.getenv("DRF_THROTTLE_ANON", "30/min"),
-        "user": os.getenv("DRF_THROTTLE_USER", "120/min"),
-        "jwt_obtain": os.getenv("DRF_THROTTLE_JWT_OBTAIN", "10/min"),
-        "jwt_refresh": os.getenv("DRF_THROTTLE_JWT_REFRESH", "30/min"),
-        "jwt_verify": os.getenv("DRF_THROTTLE_JWT_VERIFY", "60/min"),
-    },
-    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
-}
-
 # --- SimpleJWT (RS256 si clés fournies, sinon fallback HS256) ---
 JWT_PRIVATE_KEY = os.environ.get("JWT_PRIVATE_KEY", "").strip()
 JWT_PUBLIC_KEY = os.environ.get("JWT_PUBLIC_KEY", "").strip()
@@ -293,6 +323,16 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = str(BASE_DIR / "media")
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Email (dev-friendly defaults; override via env in prod)
+# ──────────────────────────────────────────────────────────────────────────────
+if APP_ENV != "prod":
+    EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+    DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@pixelprowlers.local")
+else:
+    EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+    DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@pixelprowlers.io")
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Sécurité prod + cookies
 # ──────────────────────────────────────────────────────────────────────────────
 if APP_ENV == "prod":
@@ -327,6 +367,9 @@ if "corsheaders" in INSTALLED_APPS:
 # ──────────────────────────────────────────────────────────────────────────────
 SESSION_COOKIE_SAMESITE = os.getenv("SESSION_COOKIE_SAMESITE", "Lax")
 CSRF_COOKIE_SAMESITE = os.getenv("CSRF_COOKIE_SAMESITE", "Lax")
+# En dev comme en prod: cookies HttpOnly pour limiter l'exposition côté client
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = True
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Logging console
@@ -335,18 +378,62 @@ DJANGO_LOG_LEVEL = os.getenv("DJANGO_LOG_LEVEL", "INFO").upper()
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "filters": {
+        "redact_pii": {
+            "()": "studio_core.logging.AgentPIIRedactionFilter",
+        },
+        "request_context": {
+            "()": "studio_core.logging.RequestContextFilter",
+        },
+    },
     "formatters": {
+        "json": {"()": "studio_core.logging.JsonLogFormatter"},
         "verbose": {"format": "[{levelname}] {asctime} {name}:{lineno} — {message}", "style": "{"},
         "simple": {"format": "[{levelname}] {message}", "style": "{"},
     },
-    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "verbose"}},
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "json",
+            "filters": ["redact_pii", "request_context"],
+        }
+    },
     "root": {"handlers": ["console"], "level": DJANGO_LOG_LEVEL},
     "loggers": {
         "django.db.backends": {
             "handlers": ["console"],
             "level": os.getenv("SQL_LOG_LEVEL", "WARNING"),
         },
+        "ai_assistants.ask": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "studio_core.request": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
     },
 }
+
+SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
+if SENTRY_DSN:
+    from sentry_sdk import init as sentry_init
+    from sentry_sdk.integrations.django import DjangoIntegration
+    from sentry_sdk.integrations.logging import LoggingIntegration
+
+    sentry_logging = LoggingIntegration(level=logging.INFO, event_level=logging.ERROR)
+
+    sentry_init(
+        dsn=SENTRY_DSN,
+        integrations=[DjangoIntegration(), sentry_logging],
+        environment=os.getenv("SENTRY_ENVIRONMENT", APP_ENV),
+        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0")),
+        profiles_sample_rate=float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0")),
+        send_default_pii=False,
+    )
+
+logging.getLogger("studio_core.db").info("DB target: %s", DB_CONNECTION_LABEL)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

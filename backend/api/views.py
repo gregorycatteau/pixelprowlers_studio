@@ -24,8 +24,9 @@ from typing import Iterable, Optional
 
 from django.contrib.auth import get_user_model
 from django.db.models import QuerySet
+from django.urls import path
 from rest_framework import permissions, viewsets
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.routers import DefaultRouter
 
@@ -129,9 +130,162 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
 # Router / URLs
 # ──────────────────────────────────────────────────────────────────────────────
 
+# Optional rate-limit decorator (no-op if ratelimit not installed)
+try:
+    from ratelimit.decorators import ratelimit as _ratelimit  # type: ignore
+except Exception:  # pragma: no cover - fallback for environments without ratelimit
+
+    def _ratelimit(*args, **kwargs):
+        def _wrap(f):
+            return f
+
+        return _wrap
+
+
+# Allowed event subjects (deny-by-default)
+ALLOWED_EVENT_SUBJECTS = {"intake.lead.created"}
+
+
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def auth_me(request):
+    """Retourne les informations essentielles de l'utilisateur connecté."""
+
+    user = request.user
+    data = {
+        "id": getattr(user, "pk", None),
+        "username": user.get_username(),
+        "email": (getattr(user, "email", "") or ""),
+        "is_staff": bool(getattr(user, "is_staff", False)),
+        "is_superuser": bool(getattr(user, "is_superuser", False)),
+    }
+    return Response({"ok": True, "user": data}, status=200)
+
+
+@api_view(["POST"])
+@permission_classes([permissions.AllowAny])
+@_ratelimit(key="ip", rate="30/m", block=True)
+def events_gateway(request, subject: str):
+    """
+    Events Gateway — HMAC-signed HTTP → NATS JetStream
+
+    Controls:
+    - Subject whitelist (deny-by-default)
+    - HMAC (X-Timestamp + body) in header X-Signature [sha256=HEXDIGEST or HEXDIGEST]
+    - Timestamp skew window ±60s
+    - Minimal rate-limit (30/min/IP) if ratelimit is available
+
+    Env (local/dev):
+      - EVENTS_HMAC_SECRET            : raw secret (string)
+      - EVENTS_HMAC_SECRET_FILE       : file path to secret (takes precedence if present)
+      - NATS_URL                      : e.g. nats://nats:4222
+      - NATS_USER / NATS_PASS         : optional auth (e.g. dojo_user / dojo_pass)
+    """
+    import asyncio
+    import hashlib
+    import hmac
+    import json
+    import os
+    import time
+    import uuid
+
+    # 1) Subject whitelist
+    if subject not in ALLOWED_EVENT_SUBJECTS:
+        return Response({"ok": False, "error": "subject_not_allowed"}, status=403)
+
+    # 2) HMAC headers
+    ts = request.META.get("HTTP_X_TIMESTAMP") or ""
+    sig = request.META.get("HTTP_X_SIGNATURE") or ""
+    if not ts or not sig:
+        return Response({"ok": False, "error": "missing_signature"}, status=401)
+
+    try:
+        ts_int = int(ts)
+    except Exception:
+        return Response({"ok": False, "error": "bad_timestamp"}, status=400)
+
+    now = int(time.time())
+    if abs(now - ts_int) > 60:
+        return Response({"ok": False, "error": "timestamp_skew"}, status=401)
+
+    # 3) Load HMAC secret
+    secret: bytes = (os.getenv("EVENTS_HMAC_SECRET") or "").encode("utf-8")
+    if not secret:
+        sec_path = os.getenv("EVENTS_HMAC_SECRET_FILE") or ""
+        if sec_path and os.path.exists(sec_path):
+            try:
+                with open(sec_path, "rb") as f:
+                    secret = f.read().strip()
+            except Exception:
+                secret = b""
+    if not secret:
+        return Response({"ok": False, "error": "hmac_secret_missing"}, status=503)
+
+    # 4) Verify signature against payload
+    body: bytes = request.body or b""
+    expected_hex = hmac.new(secret, f"{ts}.".encode("utf-8") + body, hashlib.sha256).hexdigest()
+    cmp_sig = sig.split("=", 1)[1] if sig.startswith("sha256=") else sig
+    if not hmac.compare_digest(cmp_sig, expected_hex):
+        return Response({"ok": False, "error": "invalid_signature"}, status=401)
+
+    # 5) Parse JSON payload
+    try:
+        data = json.loads(body.decode("utf-8")) if body else {}
+    except Exception:
+        return Response({"ok": False, "error": "invalid_json"}, status=400)
+
+    # 6) Enrich and publish to NATS
+    req_id = request.META.get("HTTP_X_REQUEST_ID") or uuid.uuid4().hex
+    event = {
+        "subject": subject,
+        "data": data,
+        "request_id": req_id,
+        "timestamp": ts_int,
+        "gateway_received_at": int(time.time()),
+        "version": 1,
+    }
+
+    async def _pub() -> bool:
+        try:
+            import nats  # type: ignore
+        except Exception:
+            return False
+        url = os.getenv("NATS_URL", "nats://nats:4222")
+        user = os.getenv("NATS_USER") or None
+        password = os.getenv("NATS_PASS") or None
+        kwargs = {}
+        if user or password:
+            kwargs["user"] = user or ""
+            kwargs["password"] = password or ""
+        try:
+            nc = await nats.connect(servers=[url], **kwargs)
+            await nc.publish(subject, json.dumps(event).encode("utf-8"))
+            await nc.flush()
+            await nc.close()
+            return True
+        except Exception:
+            return False
+
+    ok = False
+    try:
+        ok = asyncio.run(_pub())
+    except Exception:
+        ok = False
+
+    if not ok:
+        return Response({"ok": False, "error": "nats_publish_failed"}, status=503)
+
+    # 7) Success
+    return Response({"ok": True, "request_id": req_id, "subject": subject}, status=200)
+
+
 router = DefaultRouter()
 router.register(r"v1/projects", ProjectViewSet, basename="project")
 router.register(r"v1/users", UserViewSet, basename="user")
 
 # This allows `include("api.views")` directly in the project urls if desired.
-urlpatterns = router.urls
+urlpatterns = [
+    *router.urls,
+    path("auth/me/", auth_me, name="auth_me"),
+    path("events/<path:subject>/", events_gateway, name="events_gateway"),
+]

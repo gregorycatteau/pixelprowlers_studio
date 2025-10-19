@@ -25,3 +25,9 @@ frontend/.cache/
 
 cdn/embeddings/
 cdn/metadata/documents.csv
+deploy/caddy/certs/*
+*.key
+*.crt
+ops/secret/**/*.dec
+ops/secret/**/events_gateway.hmac.key*
+backend/.env

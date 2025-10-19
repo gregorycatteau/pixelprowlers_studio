@@ -1,1 +1,175 @@
 @import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, [data-theme="dark"], .dark *, [data-theme="dark"] *));
+
+@theme inline {
+  --breakpoint-sm: 30rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+  --breakpoint-2xl: 96rem;
+
+  --font-sans: ui-sans-serif, system-ui, 'Inter', 'SF Pro', 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+
+  --color-bg: oklch(0.98 0.01 250);
+  --color-surface: oklch(0.99 0.005 250);
+  --color-elev: oklch(0.96 0.01 250);
+  --color-text: oklch(0.18 0.02 250);
+  --color-muted: oklch(0.45 0.02 250);
+  --color-border: oklch(0.90 0.01 250);
+  --color-primary: oklch(0.65 0.15 260);
+  --color-success: oklch(0.70 0.14 150);
+  --color-warning: oklch(0.78 0.12 85);
+  --color-danger: oklch(0.62 0.17 25);
+  --color-info: oklch(0.72 0.12 235);
+  --color-focus: oklch(0.72 0.14 260);
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+}
+
+:root.dark,
+[data-theme='dark'] {
+  --color-bg: oklch(0.16 0.02 250);
+  --color-surface: oklch(0.19 0.02 250);
+  --color-elev: oklch(0.15 0.02 250);
+  --color-text: oklch(0.98 0.01 250);
+  --color-muted: oklch(0.75 0.02 250);
+  --color-border: oklch(0.30 0.02 250);
+  --color-primary: oklch(0.72 0.16 260);
+  --color-success: oklch(0.76 0.14 150);
+  --color-warning: oklch(0.83 0.12 85);
+  --color-danger: oklch(0.68 0.17 25);
+  --color-info: oklch(0.78 0.12 235);
+  --color-focus: oklch(0.80 0.16 260);
+}
+
+@layer base {
+  html {
+    color-scheme: light dark;
+    font-family: var(--font-sans);
+    background: var(--color-bg);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    background: var(--color-bg);
+    color: var(--color-text);
+    min-height: 100vh;
+  }
+  a {
+    color: inherit;
+  }
+}
+
+@utility bg-color-bg {
+  background-color: var(--color-bg);
+}
+
+@utility bg-color-surface {
+  background-color: var(--color-surface);
+}
+
+@utility bg-color-elev {
+  background-color: var(--color-elev);
+}
+
+@utility bg-color-primary {
+  background-color: color-mix(
+    in oklch,
+    var(--color-primary) calc(var(--tw-bg-opacity, 1) * 100%),
+    transparent
+  );
+}
+
+@utility bg-color-primary-soft {
+  background-color: color-mix(in oklch, var(--color-primary) 10%, transparent);
+}
+
+@utility bg-color-danger {
+  background-color: color-mix(in oklch, var(--color-danger) calc(var(--tw-bg-opacity, 1) * 100%), transparent);
+}
+
+@utility text-color-success {
+  color: var(--color-success);
+}
+
+@utility text-color-warning {
+  color: var(--color-warning);
+}
+
+@utility text-color-danger {
+  color: var(--color-danger);
+}
+
+@utility text-color-text {
+  color: var(--color-text);
+}
+
+@utility text-color-primary {
+  color: var(--color-primary);
+}
+
+@utility text-color-muted {
+  color: var(--color-muted);
+}
+
+@utility text-muted {
+  color: var(--color-muted);
+}
+
+@utility border-color-border {
+  border-color: var(--color-border);
+}
+
+@utility border-color-primary {
+  border-color: var(--color-primary);
+}
+
+@utility border-color-success {
+  border-color: var(--color-success);
+}
+
+@utility border-color-warning {
+  border-color: var(--color-warning);
+}
+
+@utility border-color-danger {
+  border-color: var(--color-danger);
+}
+
+.u-sr-only {
+  @apply sr-only;
+}
+
+@utility u-focus-ring {
+  @apply outline-none ring-2 ring-offset-2;
+  --tw-ring-color: var(--color-focus);
+}
+
+@utility u-grid-page {
+  @apply min-h-screen grid grid-rows-[auto_auto_1fr_auto];
+}
+
+@utility u-header {
+  @apply border-b border-color-border bg-color-surface;
+}
+
+@utility u-card {
+  @apply bg-color-surface border border-color-border rounded-[var(--radius-md)] shadow-sm;
+}
+
+@utility u-btn-base {
+  @apply inline-flex items-center justify-center gap-2 rounded-[var(--radius-sm)] px-4 py-2 text-sm font-medium transition-colors;
+}
+
+@utility u-btn-primary {
+  @apply u-btn-base bg-color-primary text-white hover:brightness-110 focus-visible:u-focus-ring;
+}
+
+@utility u-btn-ghost {
+  @apply u-btn-base border border-color-border hover:bg-color-elev focus-visible:u-focus-ring;
+}

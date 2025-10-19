@@ -1,0 +1,177 @@
+{
+  "name": "WF-01 Intake→Roadmap (Sprint 0)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "intake",
+        "options": {
+          "rawBody": true
+        },
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-intake-trigger",
+      "name": "Intake Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "intake-lead-webhook"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Validate incoming payload\nconst body = $input.item.json.body || $input.item.json;\n\n// Required fields\nconst requiredFields = ['email', 'project_name'];\nconst errors = [];\n\nfor (const field of requiredFields) {\n  if (!body[field] || body[field].trim() === '') {\n    errors.push(`Missing or empty required field: ${field}`);\n  }\n}\n\n// Basic email validation\nif (body.email && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.email)) {\n  errors.push('Invalid email format');\n}\n\nif (errors.length > 0) {\n  throw new Error('Validation failed: ' + errors.join(', '));\n}\n\n// Generate unique ID and timestamp\nconst leadId = `lead_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;\nconst timestamp = new Date().toISOString();\n\n// Prepare validated payload\nreturn {\n  json: {\n    id: leadId,\n    email: body.email.trim().toLowerCase(),\n    project_name: body.project_name.trim(),\n    description: body.description || '',\n    source: body.source || 'webhook',\n    timestamp: timestamp,\n    status: 'pending',\n    metadata: {\n      user_agent: body.user_agent || 'unknown',\n      ip: body.ip || 'unknown',\n      referrer: body.referrer || 'unknown'\n    }\n  }\n};"
+      },
+      "id": "validate-payload",
+      "name": "Validate Payload",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://nats:4222/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "options": {
+          "timeout": 5000
+        },
+        "functionCode": "// NATS publish simulation (Sprint 0)\n// In production, use proper NATS client library or HTTP proxy\n\nconst payload = $input.item.json;\n\n// Prepare NATS message for subject: intake.lead.created\nconst natsMessage = {\n  subject: 'intake.lead.created',\n  data: {\n    id: payload.id,\n    email: payload.email,\n    project_name: payload.project_name,\n    description: payload.description,\n    timestamp: payload.timestamp,\n    source: payload.source,\n    status: payload.status\n  },\n  metadata: {\n    publisher: 'n8n-wf-01',\n    version: '1.0',\n    published_at: new Date().toISOString()\n  }\n};\n\n// Log to console (visible in n8n logs)\nconsole.log('[NATS Publish] Subject:', natsMessage.subject);\nconsole.log('[NATS Publish] Payload:', JSON.stringify(natsMessage.data, null, 2));\n\n// Pass through for next node\nreturn {\n  json: {\n    ...payload,\n    nats_published: true,\n    nats_subject: natsMessage.subject,\n    nats_message: natsMessage\n  }\n};"
+      },
+      "id": "publish-nats",
+      "name": "Publish to NATS",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// TODO: Create Epic & Tasks in project management system\n// Placeholder for Sprint 0 — will integrate with actual PM tool later\n\nconst lead = $input.item.json;\n\n// Mock epic/task creation\nconst epic = {\n  id: `epic_${lead.id}`,\n  title: `[Client] ${lead.project_name}`,\n  description: `New lead from ${lead.email}\\n\\nProject: ${lead.project_name}\\nDescription: ${lead.description || 'N/A'}`,\n  status: 'backlog',\n  priority: 'medium',\n  created_at: new Date().toISOString(),\n  tasks: [\n    {\n      id: `task_${lead.id}_discovery`,\n      title: 'Discovery Call',\n      status: 'todo',\n      assignee: null\n    },\n    {\n      id: `task_${lead.id}_proposal`,\n      title: 'Prepare Proposal',\n      status: 'todo',\n      assignee: null\n    },\n    {\n      id: `task_${lead.id}_followup`,\n      title: 'Follow-up Email',\n      status: 'todo',\n      assignee: null\n    }\n  ]\n};\n\nconsole.log('[TODO] Epic created:', epic.id);\nconsole.log('[TODO] Tasks:', epic.tasks.length);\n\nreturn {\n  json: {\n    ...lead,\n    epic_created: true,\n    epic: epic\n  }\n};"
+      },
+      "id": "create-epic-tasks",
+      "name": "Create Epic & Tasks (TODO)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Notification node — logs to console (prepares future Slack/email integration)\n\nconst result = $input.item.json;\n\nconst notification = {\n  title: '🎯 New Lead Processed',\n  message: `Lead ID: ${result.id}\\nEmail: ${result.email}\\nProject: ${result.project_name}\\nEpic: ${result.epic?.id || 'N/A'}\\nTimestamp: ${result.timestamp}`,\n  status: 'success',\n  metadata: {\n    nats_published: result.nats_published,\n    nats_subject: result.nats_subject,\n    epic_created: result.epic_created,\n    tasks_count: result.epic?.tasks?.length || 0\n  }\n};\n\nconsole.log('\\n' + '='.repeat(60));\nconsole.log(notification.title);\nconsole.log('='.repeat(60));\nconsole.log(notification.message);\nconsole.log('\\nMetadata:', JSON.stringify(notification.metadata, null, 2));\nconsole.log('='.repeat(60) + '\\n');\n\nreturn {\n  json: {\n    ...result,\n    notification_sent: true,\n    notification: notification\n  }\n};"
+      },
+      "id": "notify",
+      "name": "Notify (Console)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  success: true,\n  message: 'Lead intake processed successfully',\n  lead_id: $json.id,\n  timestamp: $json.timestamp,\n  epic_id: $json.epic?.id\n}) }}"
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 400,
+        "responseBody": "={{ JSON.stringify({\n  success: false,\n  message: 'Validation failed',\n  error: $json.message || 'Invalid payload'\n}) }}"
+      },
+      "id": "respond-error",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 500]
+    }
+  ],
+  "connections": {
+    "Intake Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Payload": {
+      "main": [
+        [
+          {
+            "node": "Publish to NATS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish to NATS": {
+      "main": [
+        [
+          {
+            "node": "Create Epic & Tasks (TODO)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Epic & Tasks (TODO)": {
+      "main": [
+        [
+          {
+            "node": "Notify (Console)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify (Console)": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "1",
+      "name": "sprint-0"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "2",
+      "name": "intake"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

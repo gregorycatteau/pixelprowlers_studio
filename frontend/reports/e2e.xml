@@ -1,0 +1,110 @@
+<testsuites id="" name="" tests="12" failures="0" skipped="0" errors="0" time="121.08971399999999">
+<testsuite name="eotp-expired.spec.ts" timestamp="2025-10-18T16:58:29.776Z" hostname="chromium" tests="1" failures="0" skipped="0" time="8.17" errors="0">
+<testcase name="e-OTP expired -&gt; generic failure, then resend OK › OTP expires (TTL), verify fails, resend succeeds with Retry-After" classname="eotp-expired.spec.ts" time="8.17">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/eotp-expired-e-OTP-expired-2c9e9-d-succeeds-with-Retry-After-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="eotp-invalid.spec.ts" timestamp="2025-10-18T16:58:29.776Z" hostname="chromium" tests="1" failures="0" skipped="0" time="1.944" errors="0">
+<testcase name="e-OTP invalid code (generic error, no details) › invalid OTP -&gt; generic 401/403; then correct OTP works" classname="eotp-invalid.spec.ts" time="1.944">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/eotp-invalid-e-OTP-invalid-3ac16--403-then-correct-OTP-works-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="eotp-locked.spec.ts" timestamp="2025-10-18T16:58:29.776Z" hostname="chromium" tests="1" failures="0" skipped="0" time="4.444" errors="0">
+<testcase name="e-OTP locked after MAX_TRIES invalid attempts (generic responses) › exceed invalid attempts -&gt; generic failure; fresh login still works" classname="eotp-locked.spec.ts" time="4.444">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/eotp-locked-e-OTP-locked-a-343b5-ure-fresh-login-still-works-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="eotp-resend-quota.spec.ts" timestamp="2025-10-18T16:58:29.776Z" hostname="chromium" tests="1" failures="0" skipped="0" time="11.371" errors="0">
+<testcase name="e-OTP resend quota (3/h OK, 4th -&gt; 429) › three resends OK with cooldown; fourth returns 429" classname="eotp-resend-quota.spec.ts" time="11.371">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/eotp-resend-quota-e-OTP-re-e6803-cooldown-fourth-returns-429-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="eotp-expired.spec.ts" timestamp="2025-10-18T16:58:29.776Z" hostname="firefox" tests="1" failures="0" skipped="0" time="7.344" errors="0">
+<testcase name="e-OTP expired -&gt; generic failure, then resend OK › OTP expires (TTL), verify fails, resend succeeds with Retry-After" classname="eotp-expired.spec.ts" time="7.344">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/eotp-expired-e-OTP-expired-2c9e9-d-succeeds-with-Retry-After-firefox/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="eotp-invalid.spec.ts" timestamp="2025-10-18T16:58:29.776Z" hostname="firefox" tests="1" failures="0" skipped="0" time="2.059" errors="0">
+<testcase name="e-OTP invalid code (generic error, no details) › invalid OTP -&gt; generic 401/403; then correct OTP works" classname="eotp-invalid.spec.ts" time="2.059">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/eotp-invalid-e-OTP-invalid-3ac16--403-then-correct-OTP-works-firefox/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="eotp-locked.spec.ts" timestamp="2025-10-18T16:58:29.776Z" hostname="firefox" tests="1" failures="0" skipped="0" time="4.221" errors="0">
+<testcase name="e-OTP locked after MAX_TRIES invalid attempts (generic responses) › exceed invalid attempts -&gt; generic failure; fresh login still works" classname="eotp-locked.spec.ts" time="4.221">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/eotp-locked-e-OTP-locked-a-343b5-ure-fresh-login-still-works-firefox/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="eotp-resend-quota.spec.ts" timestamp="2025-10-18T16:58:29.776Z" hostname="firefox" tests="1" failures="0" skipped="0" time="11.966" errors="0">
+<testcase name="e-OTP resend quota (3/h OK, 4th -&gt; 429) › three resends OK with cooldown; fourth returns 429" classname="eotp-resend-quota.spec.ts" time="11.966">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/eotp-resend-quota-e-OTP-re-e6803-cooldown-fourth-returns-429-firefox/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="eotp-expired.spec.ts" timestamp="2025-10-18T16:58:29.776Z" hostname="webkit" tests="1" failures="0" skipped="0" time="7.466" errors="0">
+<testcase name="e-OTP expired -&gt; generic failure, then resend OK › OTP expires (TTL), verify fails, resend succeeds with Retry-After" classname="eotp-expired.spec.ts" time="7.466">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/eotp-expired-e-OTP-expired-2c9e9-d-succeeds-with-Retry-After-webkit/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="eotp-invalid.spec.ts" timestamp="2025-10-18T16:58:29.776Z" hostname="webkit" tests="1" failures="0" skipped="0" time="2.27" errors="0">
+<testcase name="e-OTP invalid code (generic error, no details) › invalid OTP -&gt; generic 401/403; then correct OTP works" classname="eotp-invalid.spec.ts" time="2.27">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/eotp-invalid-e-OTP-invalid-3ac16--403-then-correct-OTP-works-webkit/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="eotp-locked.spec.ts" timestamp="2025-10-18T16:58:29.776Z" hostname="webkit" tests="1" failures="0" skipped="0" time="4.579" errors="0">
+<testcase name="e-OTP locked after MAX_TRIES invalid attempts (generic responses) › exceed invalid attempts -&gt; generic failure; fresh login still works" classname="eotp-locked.spec.ts" time="4.579">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/eotp-locked-e-OTP-locked-a-343b5-ure-fresh-login-still-works-webkit/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="eotp-resend-quota.spec.ts" timestamp="2025-10-18T16:58:29.776Z" hostname="webkit" tests="1" failures="0" skipped="0" time="11.296" errors="0">
+<testcase name="e-OTP resend quota (3/h OK, 4th -&gt; 429) › three resends OK with cooldown; fourth returns 429" classname="eotp-resend-quota.spec.ts" time="11.296">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/eotp-resend-quota-e-OTP-re-e6803-cooldown-fourth-returns-429-webkit/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+</testsuites>

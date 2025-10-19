@@ -50,11 +50,23 @@ const handler: EventHandler = defineEventHandler(async (event: H3Event): Promise
   const upstreamHeaders: Record<string, string> = { 'content-type': 'application/json' }
   if (reqHeaders.cookie) upstreamHeaders.cookie = reqHeaders.cookie
   if (reqHeaders['x-csrftoken']) upstreamHeaders['x-csrftoken'] = reqHeaders['x-csrftoken']
+  if (reqHeaders['x-request-nonce'])
+    upstreamHeaders['x-request-nonce'] = reqHeaders['x-request-nonce']
+
+  // --- Sprint 00: idempotency + correlation + anti-replay timestamp ---
+  const nowSec = Math.floor(Date.now() / 1000)
+  const idemKey = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  const corrId = `corr-${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`
+  const threadId = `thr-${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`
+  upstreamHeaders['x-timestamp'] = String(nowSec)
+  upstreamHeaders['idempotency-key'] = idemKey
+  upstreamHeaders['x-correlation-id'] = corrId
 
   // --- appel upstream ---
+  const requestBody: any = { ...payload, idempotency_key: idemKey, thread_id: threadId }
   const res: AskResponse = await $fetch<AskResponse>(
     `${base}/api/agents/${encodeURIComponent(slug)}/ask`,
-    { method: 'POST', headers: upstreamHeaders, body: payload },
+    { method: 'POST', headers: upstreamHeaders, body: requestBody },
   ).catch((e: any) => {
     throw createError({
       statusCode: 502,

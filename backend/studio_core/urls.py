@@ -6,15 +6,20 @@ from __future__ import annotations
 from accounts.admin import admin_site
 from django.conf import settings
 from django.conf.urls.static import static
-from django.http import HttpResponseNotFound
+from django.http import HttpResponse, HttpResponseNotFound, JsonResponse
+from django.middleware.csrf import get_token
 from django.urls import include, path, re_path
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.generic import RedirectView
 
 # OpenAPI schema views (drf-spectacular)
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+from eotp import views as eotp_views
+from laby import views as laby_views
 
 # JWT (DRF SimpleJWT) — compat héritée
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
+from studio_core.metrics import prometheus_text
 
 from . import views
 from .graphql_security import secure_graphql_view  # ← vue sécurisée (fonction)
@@ -31,6 +36,13 @@ def admin_honeypot(*args, **kwargs):
     if request is not None:
         log_honeypot_hit(request)
     return HttpResponseNotFound()
+
+
+@ensure_csrf_cookie
+def csrf_token(request):
+    resp = JsonResponse({"ok": True, "csrf": get_token(request)}, status=200)
+    resp["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    return resp
 
 
 urlpatterns = [
@@ -57,6 +69,20 @@ urlpatterns = [
     # REST test
     # =========================
     path("api/ping/", views.api_ping, name="api_ping"),
+    path("api/auth/csrf/", csrf_token, name="csrf_token"),
+    path("api/hello/", views.api_hello, name="api_hello"),
+    path("_fa/verify", views.forward_auth_verify, name="forward_auth_verify"),
+    path(".well-known/jwks.json", views.jwks_json, name="jwks_json"),
+    path(
+        "metrics",
+        lambda request: HttpResponse(
+            prometheus_text(), content_type="text/plain; version=0.0.4; charset=utf-8"
+        ),
+        name="metrics",
+    ),
+    # Debug e-OTP stats (DEV/TEST only; gated in view)
+    path("debug/eotp-stats", views.debug_eotp_stats, name="debug_eotp_stats"),
+    path("debug/eotp-stats/", views.debug_eotp_stats, name="debug_eotp_stats_slash"),
     # =========================
     # OpenAPI schema & docs (drf-spectacular)
     # =========================
@@ -82,11 +108,21 @@ urlpatterns = [
     # Accounts (login-cookie, refresh-cookie, whoami, etc.)
     # =========================
     path("api/accounts/", include("accounts.urls")),
+    # Alias to expose /api/auth/* directly (frontend expects these)
+    path("api/", include("accounts.urls")),
+    # Webhooks (S2): Postmark bounces
+    path(
+        "api/webhooks/postmark/bounce/", eotp_views.webhook_postmark_bounce, name="postmark_bounce"
+    ),
     # =========================
     # API Agents (consommée par Nuxt)
     # =========================
     path("api/", include("api.views")),
     path("api/", include("ai_assistants.urls")),
+    # =========================
+    # MCP serveur (consommé par les clients MCP)
+    # =========================
+    # path("mcp/", include("mcp_server.urls")),
 ]
 
 # Debug toolbar + médias en dev
@@ -98,3 +134,21 @@ if settings.DEBUG:
     except Exception:
         pass
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# Laby honeypot routes (only when Laby realm is active)
+if getattr(settings, "REALM_NAME", "") == "laby":
+    urlpatterns += [
+        path("api/projects/", laby_views.api_projects_list, name="laby_projects_list"),
+        path(
+            "api/projects/<slug:slug>/", laby_views.api_projects_detail, name="laby_projects_detail"
+        ),
+        path("api/agents/", laby_views.api_agents_list, name="laby_agents_list"),
+        path("api/agents/<slug:slug>/ask", laby_views.api_agents_ask, name="laby_agents_ask"),
+        path("admin/login/", laby_views.admin_login_honeypot, name="laby_admin_login"),
+        path("laby/health", laby_views.laby_health, name="laby_health"),
+        path("artifacts/.env", laby_views.artifact_env, name="laby_artifact_env"),
+        path("artifacts/id_ed25519", laby_views.artifact_id_ed25519, name="laby_artifact_key"),
+        path(
+            "artifacts/notes_admin.txt", laby_views.artifact_notes_admin, name="laby_artifact_notes"
+        ),
+    ]

@@ -1,0 +1,318 @@
+name: CI — Full (unit + integration + e2e, fail-fast)
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  schedule:
+    # Weekly MaxMind update (UTC Monday 03:00)
+    - cron: "0 3 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-full-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.13"
+  NODE_VERSION: "22"
+  # Base URL defaults (override per environment in repository/Org settings if needed)
+  PPW_BASE_URL: "http://localhost:3000"
+  DOJO_BASE_URL: "https://localhost:8443"
+  INTEGRATION_TLS_INSECURE: "1" # set to 0 when proper TLS is available
+
+jobs:
+  unit:
+    name: Unit — Python + Frontend (SBOM & scans)
+    runs-on: ubuntu-latest
+
+    # PostgreSQL service for Django tests
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d testdb"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+
+    env:
+      DJANGO_SETTINGS_MODULE: studio_core.settings.test
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/testdb
+      PYTHONUNBUFFERED: "1"
+      PYTHON_VERSION: ${{ env.PYTHON_VERSION }}
+      NODE_VERSION: ${{ env.NODE_VERSION }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ----- Python (backend) -----
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Cache Poetry and pip
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pypoetry
+            ~/.cache/pip
+          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+
+      - name: Install backend deps
+        working-directory: backend
+        run: poetry install --no-interaction --no-ansi
+
+      - name: Wait for Postgres
+        working-directory: backend
+        run: |
+          poetry run python - <<'PY'
+          import os, time, psycopg
+          dsn = os.environ["DATABASE_URL"]
+          for i in range(60):
+              try:
+                  with psycopg.connect(dsn, connect_timeout=3) as conn:
+                      with conn.cursor() as cur:
+                          cur.execute("SELECT 1;")
+                          print("Postgres ready")
+                          raise SystemExit(0)
+              except Exception as e:
+                  time.sleep(1)
+          raise SystemExit("DB not ready after 60s")
+          PY
+
+      - name: Pytest (coverage XML)
+        working-directory: backend
+        run: |
+          poetry run coverage run -m pytest -q
+          poetry run coverage xml -o coverage.xml
+          poetry run coverage report -m || true
+
+      - name: CycloneDX SBOM (backend)
+        working-directory: backend
+        run: |
+          python -m pip install --disable-pip-version-check cyclonedx-bom || true
+          if command -v cyclonedx-bom >/dev/null 2>&1; then
+            cyclonedx-bom --e -o backend-sbom.json --format json || true
+          elif command -v cyclonedx-py >/dev/null 2>&1; then
+            cyclonedx-py --format json -o backend-sbom.json -e || true
+          else
+            echo "CycloneDX backend tool not available; skipping"
+          fi
+
+      - name: pip-audit (strict)
+        working-directory: backend
+        run: |
+          python -m pip install --disable-pip-version-check pip-audit
+          pip-audit -r <(poetry export -f requirements.txt --without-hashes) --strict
+
+      - name: Install OSV-Scanner
+        run: |
+          mkdir -p osv && curl -sSfL https://raw.githubusercontent.com/google/osv-scanner/main/scripts/install.sh | sh -s -- -b osv
+          echo "$GITHUB_WORKSPACE/osv" >> $GITHUB_PATH
+
+      - name: OSV-Scanner (repo)
+        run: osv/osv-scanner -r .
+
+      # ----- Frontend (web) -----
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: CycloneDX SBOM (frontend)
+        working-directory: frontend
+        run: |
+          npx --yes @cyclonedx/cyclonedx-npm@latest --output-file=sbom-frontend.json --output-format=json
+
+      - name: npm audit (High/Critical fail)
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+      # ----- Allowlist expirante (≤ 14j) -----
+      - name: Combine vulnerability reports (JSON)
+        run: |
+          mkdir -p reports
+          # pip-audit JSON
+          poetry export -f requirements.txt --without-hashes -o /tmp/req.txt
+          python -m pip install --disable-pip-version-check pip-audit >/dev/null 2>&1 || true
+          pip-audit -r /tmp/req.txt -f json -o reports/pip_audit.json || true
+          # OSV scanner JSON
+          if command -v osv-scanner >/dev/null 2>&1; then
+            osv-scanner -r . --json > reports/osv_scanner.json || true
+          elif [ -x osv/osv-scanner ]; then
+            ./osv/osv-scanner -r . --json > reports/osv_scanner.json || true
+          fi
+          # npm audit JSON
+          if [ -f frontend/package.json ]; then
+            (cd frontend && npm audit --json) > reports/npm_audit.json || true
+          fi
+          # Combine using jq (fallback to empty if jq missing)
+          if command -v jq >/dev/null 2>&1; then
+            jq -s '{
+              reports: .,
+              vulnerabilities: ( [.[].vulnerabilities] | add // [] )
+            }' reports/pip_audit.json reports/osv_scanner.json reports/npm_audit.json > reports/vuln_combined.json
+          else
+            echo '{"reports":[],"vulnerabilities":[]}' > reports/vuln_combined.json
+          fi
+
+      - name: Check allowlist expiry (≤ 14 days)
+        run: |
+          python scripts/check_allowlist_expiry.py --path security/allowlist.yml --max-days 14 --vuln-json reports/vuln_combined.json
+
+      - name: Upload unit artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-artifacts
+          path: |
+            backend/coverage.xml
+            backend/coverage-report/**
+            backend/backend-sbom.json
+            frontend/sbom-frontend.json
+            reports/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  integration:
+    name: Integration — mTLS, CSP/JWKS/cookies, rotation
+    runs-on: ubuntu-latest
+    needs: unit
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Bring up mTLS harness (Caddy + Dojo)
+        run: docker compose -f config/mTLS/docker-compose.mtls.yml up -d --build
+
+      - name: Test mTLS (valid/none/invalid certs)
+        run: bash scripts/test_mtls.sh
+
+      - name: CSP/JWKS/cookies checks (Dojo)
+        env:
+          BASE_URL: ${{ env.DOJO_BASE_URL }}
+        run: |
+          python scripts/check_csp_and_jwks.py \
+            --base-url "${BASE_URL}" \
+            --rotation \
+            --require-csp-enforce \
+            --insecure
+
+      - name: Rotation across refresh (conditional)
+        if: ${{ env.ROTATION_ENABLED == '1' }}
+        env:
+          BASE_URL: ${{ env.DOJO_BASE_URL }}
+          INSECURE: ${{ env.INTEGRATION_TLS_INSECURE }}
+          USERNAME: ${{ secrets.ROTATION_USERNAME }}
+          PASSWORD: ${{ secrets.ROTATION_PASSWORD }}
+          ROTATE_CMD: ${{ secrets.ROTATION_CMD }}
+          RETIRE_CMD: ${{ secrets.RETIRE_CMD }}
+        run: |
+          bash scripts/rotate_and_refresh.sh
+
+      - name: Gather logs (Caddy & Django)
+        if: ${{ always() }}
+        run: |
+          mkdir -p logs
+          docker logs mtls_caddy > logs/mtls_caddy.log 2>&1 || true
+          docker logs mtls_django_dojo > logs/mtls_django_dojo.log 2>&1 || true
+
+      - name: Upload integration logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-logs
+          path: logs/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Teardown mTLS harness
+        if: ${{ always() }}
+        run: docker compose -f config/mTLS/docker-compose.mtls.yml down -v --remove-orphans
+
+  e2e:
+    name: E2E — Playwright (screenshots & videos)
+    runs-on: ubuntu-latest
+    needs: [unit, integration]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run E2E tests (headless)
+        env:
+          PPW_BASE_URL: ${{ env.PPW_BASE_URL }}
+        run: npx playwright test --config=frontend/playwright.config.ts
+
+      - name: Upload E2E artifacts (screenshots/videos/reports)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: |
+            test-results/**
+            playwright-report/**
+            reports/e2e.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
+  maxmind_weekly:
+    name: MaxMind weekly — update & archive (cron)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Update MaxMind (ASN/City)
+        env:
+          MAXMIND_LICENSE_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
+        run: |
+          bash scripts/update_maxmind.sh
+
+      - name: Upload MaxMind artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: maxmind-artifacts
+          path: |
+            config/maxmind/current/VERSION.txt
+            config/maxmind/archives/**
+          if-no-files-found: ignore
+          retention-days: 30

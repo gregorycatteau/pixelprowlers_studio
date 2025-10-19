@@ -26,12 +26,27 @@ drf-spectacular-sidecar = "*"
 jsonschema = "^4"
 celery = "^5"
 redis = "^5"
+argon2-cffi = "*"
+django-otp = "*"
+django-two-factor-auth = "*"
+django-allauth = "*"
+requests = "*"
+pyzipper = "*"
+pgpy = "*"
+sentry-sdk = {extras = ["django"], version = "^2.41.0"}
+django-mcp-server = "^0.5.7"
+django-mcp = "^0.3.1"
+uvicorn = "^0.37.0"
 
 [tool.poetry.group.dev.dependencies]
 django-debug-toolbar = "^4.4.6"
 ipython = "^8.27.0"
 rich = "^13.8.1"
 poethepoet = "^0.28.0"
+pytest-cov = "^7.0.0"
+pip-audit = "^2.9.0"
+bandit = "^1.8.6"
+safety = "^3.6.2"
 
 [tool.poetry.group.test.dependencies]
 pytest = "^8.3.2"

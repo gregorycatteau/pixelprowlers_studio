@@ -15,18 +15,38 @@ Monorepo Nuxt 4 + Tailwind 4 (frontend) et Django (Poetry) + PostgreSQL/SQLite (
 - Poetry (gestion des dépendances Python)
 - npm (gestion des dépendances frontend)
 
-## Démarrer (dev)
+## Démarrage DEV (PostgreSQL local 5432)
 
-Frontend (Nuxt 4)
-    cd frontend
-    npm ci
-    npm run dev
+- `make dev-env`
+- `make redis-up` (si Redis 6379 n’est pas déjà lancé)
+- `./scripts/dev-check.sh`
+- `poetry install --with dev --directory backend`
+- `npm install --prefix frontend`
+- `make init-dev`
+- `make dev` → backend: http://localhost:8000 · frontend: http://localhost:3000
+- Identifiants dev : **striker / Ide33480/(12)** (usage local uniquement)
+  (`npm run dev:bootstrap` reste réservé aux scénarios E2E isolés : purge conversations/messages)
 
-Backend (Django)
-    cd backend
-    poetry install
-    poetry run python manage.py migrate
-    poetry run python manage.py runserver 0.0.0.0:8000
+### Run now (résumé express)
+
+1. `make dev-env`
+2. `./scripts/dev-check.sh`
+3. `poetry install --with dev --directory backend`
+4. `npm install --prefix frontend`
+5. `APP_ENV=dev poetry run python manage.py init_dev_env`
+6. `make dev`
+7. Dans un autre terminal : exécuter les smokes `docs/auth/smoke-dojo.http` (HTTPie)
+   ```
+   cd docs/auth
+   bash smoke-dojo.http
+   ```
+8. `make smoke` (raccourci pour relancer les smokes)
+
+👉 En développement, la CSP est automatiquement assouplie (`'unsafe-inline'`, `'unsafe-eval'`, `ws://localhost:5173`) pour laisser Vite HMR fonctionner. En production, la politique reste stricte (pas d'unsafe, pas de websocket arbitraire).
+
+### API utiles
+
+- `GET /api/auth/me/` — renvoie les informations essentielles de l'utilisateur courant (session ou JWT obligatoire).
 
 ## Scripts utiles
 
@@ -35,6 +55,7 @@ Frontend
 - Typecheck: npm run typecheck
 - Stylelint: npm run stylelint
 - Build: npm run build
+- Tests E2E: npm run test:e2e
 
 Backend
 - Migrations: poetry run python manage.py makemigrations
@@ -78,3 +99,41 @@ docker/
 - Variables d’environnement: .env (commun) + .env.<APP_ENV> (dev/test/prod/upgrade)
 
 Bon build et bonne chasse aux pixels 🐾
+
+## Checkpoints Sprint 0 — Jour J (raccourcis)
+
+- CP#1 — Caddy headers + X-Request-ID
+  - Nuxt headers:
+    curl -I http://dev.localhost
+  - Django health:
+    curl -I http://api.dev.localhost/health
+
+- CP#2 — Postgres + NATS
+  - NATS subscribe (dojo):
+    docker run --rm -it --network host synadia/nats-box:0.14 \
+      nats sub -s nats://dojo_user:dojo_pass@127.0.0.1:4222 'intake.>'
+  - NATS publish (dojo):
+    docker run --rm -it --network host synadia/nats-box:0.14 \
+      nats pub -s nats://dojo_user:dojo_pass@127.0.0.1:4222 'intake.lead.created' \
+      '{"id":"demo-001","email":"alice@example.com","project_name":"Dojo"}'
+
+- CP#3 — n8n WF-01 (Intake→Roadmap)
+  - Trigger (POST):
+    curl -sS -X POST http://n8n.dev.localhost/webhook/intake \
+      -H 'Content-Type: application/json' \
+      -H 'X-Request-ID: demo-n8n-123' \
+      -d '{"email":"alice@example.com","project_name":"Dojo"}' | jq .
+
+## Curls utiles (DX rapide)
+
+- Corrélation bout-en-bout (Nuxt /health → Django /api/hello):
+    curl -sS -H 'X-Request-ID: demo-123' http://dev.localhost/health | jq .
+
+- OpenAPI (DRF Spectacular):
+    curl -sS http://api.dev.localhost/api/schema/ | head -n 40
+
+- API hello:
+    curl -sS http://api.dev.localhost/api/hello/ | jq .
+
+- Gate Sécurité v1 (Trivy + Semgrep):
+    ./ops/security/gate_v1.sh

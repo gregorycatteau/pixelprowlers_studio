@@ -9,7 +9,6 @@
         </p>
       </header>
 
-      <!-- ÉTAPE 1 (ne révèle rien) -->
       <div v-if="step === 1" class="step">
         <p class="hint">Décrivez brièvement votre objectif ou collez l’instruction à exécuter.</p>
 
@@ -23,11 +22,12 @@
         <div class="actions">
           <button
             class="btn-primary"
-            :disabled="loading || !absurdText.trim()"
+            :disabled="loading || !absurdText.trim() || retryAfter > 0"
             @click="submitAbsurdity"
           >
-            <span v-if="!loading">Continuer</span>
-            <span v-else>Traitement…</span>
+            <span v-if="retryAfter <= 0 && !loading">Continuer</span>
+            <span v-else-if="loading">Traitement…</span>
+            <span v-else>Réessayer dans {{ retryAfter }} s</span>
           </button>
         </div>
 
@@ -36,7 +36,6 @@
         </p>
       </div>
 
-      <!-- ÉTAPE 2 (ne révèle rien) -->
       <div v-else class="step">
         <div class="prompt-box">
           {{ challengePrompt || 'Agent prêt — saisissez votre requête.' }}
@@ -48,11 +47,12 @@
           <button class="btn-secondary" :disabled="loading" @click="backToStep1">← Revenir</button>
           <button
             class="btn-primary"
-            :disabled="loading || !ritualText.trim()"
+            :disabled="loading || !ritualText.trim() || retryAfter > 0"
             @click="submitRitual"
           >
-            <span v-if="!loading">Entrer dans le Studio</span>
-            <span v-else>Vérification…</span>
+            <span v-if="retryAfter <= 0 && !loading">Entrer dans le Studio</span>
+            <span v-else-if="loading">Vérification…</span>
+            <span v-else>Réessayer dans {{ retryAfter }} s</span>
           </button>
         </div>
 
@@ -70,73 +70,150 @@
         </p>
       </footer>
     </div>
+    <PxToast v-model="toast.visible" :variant="toast.variant" :message="toast.message" />
   </section>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
 import { navigateTo } from '#app'
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import type { FetchError } from 'ofetch'
 
-type AbsurdityResp = { ok: boolean; score?: number; reason?: string; fails?: number }
+definePageMeta({
+  middleware: ['dojo'],
+})
+
+type AbsurdityResp = { ok: boolean; score?: number; reason?: string; fails?: number; error?: string }
 type InitResp = { ok: boolean; prompt: string }
-type VerifyResp = { ok: boolean }
+type VerifyResp = { ok: boolean; error?: string }
+
+const auth = useAuth()
+const nonce = useNonce()
+const fetcher = useRequestFetch()
 
 const step = ref<1 | 2>(1)
 const loading = ref(false)
 const absurdText = ref('')
 const ritualText = ref('')
+const retryAfter = ref(0)
+let retryTimer: ReturnType<typeof setInterval> | null = null
 
 const challengePrompt = ref('')
 
 const feedback = ref('')
 const feedbackOk = ref(false)
 
-function setFeedback(msg: string, ok = false) {
+const toast = reactive({
+  visible: false,
+  message: '',
+  variant: 'info' as 'info' | 'success' | 'warning' | 'danger',
+})
+
+const nonceErrors = new Set(['nonce_missing', 'nonce_replay', 'nonce_invalid', 'nonce_expired'])
+
+const ensureNonce = async () => {
+  if (!nonce.current) {
+    await nonce.refresh()
+  }
+}
+
+const openToast = (message: string, variant: 'info' | 'success' | 'warning' | 'danger' = 'info') => {
+  toast.message = message
+  toast.variant = variant
+  toast.visible = true
+}
+
+const setFeedback = (msg: string, ok = false) => {
   feedback.value = msg
   feedbackOk.value = ok
-  // Feedback discret (pas de détails d’échec)
-  setTimeout(() => (feedback.value = ''), 3500)
+  setTimeout(() => {
+    feedback.value = ''
+  }, 3500)
 }
 
-/**
- * Wrapper $fetch sans générique direct (évite TypedInternalResponse).
- * On caste après l’appel.
- */
-async function postJSON<T = unknown>(url: string, body: any): Promise<T> {
-  const res = await $fetch(url, {
-    method: 'POST' as const,
-    body,
-    credentials: 'include' as const,
-  })
-  return res as T
+const clearRetryTimer = () => {
+  if (retryTimer) {
+    clearInterval(retryTimer)
+    retryTimer = null
+  }
 }
 
-async function submitAbsurdity() {
+const startRetryCountdown = (seconds: number) => {
+  clearRetryTimer()
+  retryAfter.value = Math.max(1, Math.round(seconds))
+  retryTimer = setInterval(() => {
+    retryAfter.value -= 1
+    if (retryAfter.value <= 0) {
+      clearRetryTimer()
+    }
+  }, 1000)
+}
+
+const requestWithNonce = async <T>(exec: () => Promise<T>): Promise<T> => {
+  let retried = false
+  for (;;) {
+    try {
+      return await exec()
+    } catch (err) {
+      const error = err as FetchError<{ error?: string }>
+      const code = error?.response?._data?.error
+      if (!retried && code && nonceErrors.has(code)) {
+        retried = true
+        await nonce.refresh()
+        continue
+      }
+      throw err
+    }
+  }
+}
+
+const submitAbsurdity = async () => {
+  if (!absurdText.value.trim()) return
+  await ensureNonce()
   loading.value = true
+
   try {
-    // Étape silencieuse : on ne révèle pas la nature du check
-    const res = await postJSON<AbsurdityResp>('/api/gates/absurdity-check', {
-      text: absurdText.value,
-    })
+    const res = await requestWithNonce(() =>
+      fetcher<AbsurdityResp>('/api/gates/absurdity-check', {
+        method: 'POST',
+        body: { text: absurdText.value },
+      }),
+    )
+
     if (res.ok) {
       setFeedback('Ok.', true)
-      // On enchaîne discrètement avec l’initialisation du “prompt”
       await initChallenge()
       step.value = 2
-    } else {
-      // Message générique (pas d’indices)
+    } else if (res.reason === 'no_absurd_match') {
       setFeedback('Commande non reconnue. Reformulez en une phrase courte.')
+    } else if (res.error === 'rate_limited') {
+      setFeedback('Trop de requêtes. Attendez avant de réessayer.')
+      startRetryCountdown(30)
+    } else {
+      setFeedback('Temporairement indisponible. Réessayez.')
     }
-  } catch (e: any) {
-    setFeedback('Temporairement indisponible. Réessayez.')
+  } catch (err) {
+    const error = err as FetchError<{ error?: string }>
+    if (error?.response?._data?.error === 'rate_limited') {
+      setFeedback('Trop de requêtes. Attendez avant de réessayer.')
+      startRetryCountdown(30)
+    } else {
+      setFeedback('Temporairement indisponible. Réessayez.')
+    }
   } finally {
     loading.value = false
   }
 }
 
-async function initChallenge() {
+const initChallenge = async () => {
+  await ensureNonce()
   try {
-    const res = await postJSON<InitResp>('/api/gates/challenge-init', { agent: 'Claire' })
+    const res = await requestWithNonce(() =>
+      fetcher<InitResp>('/api/gates/challenge-init', {
+        method: 'POST',
+        body: { agent: 'Claire' },
+      }),
+    )
     if (res.ok) {
       challengePrompt.value = res.prompt
     }
@@ -145,39 +222,63 @@ async function initChallenge() {
   }
 }
 
-async function submitRitual() {
+const submitRitual = async () => {
+  if (!ritualText.value.trim()) return
+  await ensureNonce()
   loading.value = true
+
   try {
-    const res = await postJSON<VerifyResp>('/api/gates/challenge-verify', {
-      agent: 'Claire',
-      response: ritualText.value,
-    })
+    const res = await requestWithNonce(() =>
+      fetcher<VerifyResp>('/api/gates/challenge-verify', {
+        method: 'POST',
+        body: { agent: 'Claire', response: ritualText.value },
+      }),
+    )
+
     if (res.ok) {
       setFeedback('Session prête.', true)
-      setTimeout(() => navigateTo('/ask-agent'), 200)
-    } else {
-      // Ne rien dévoiler :
+      auth.markGate(true, Date.now())
+      openToast('Gate validé.', 'success')
+      setTimeout(() => {
+        navigateTo('/ask-agents')
+      }, 200)
+    } else if (res.error === 'bad_phrase') {
       setFeedback('Réponse non reconnue.')
+    } else if (res.error === 'rate_limited') {
+      setFeedback('Trop de tentatives. Patientez avant de réessayer.')
+      startRetryCountdown(30)
+    } else {
+      setFeedback('Temporairement indisponible. Réessayez.')
     }
-  } catch {
-    setFeedback('Temporairement indisponible. Réessayez.')
+  } catch (err) {
+    const error = err as FetchError<{ error?: string }>
+    if (error?.response?._data?.error === 'rate_limited') {
+      setFeedback('Trop de tentatives. Patientez avant de réessayer.')
+      startRetryCountdown(30)
+    } else {
+      setFeedback('Temporairement indisponible. Réessayez.')
+    }
   } finally {
     loading.value = false
   }
 }
 
-function backToStep1() {
+const backToStep1 = () => {
   step.value = 1
   ritualText.value = ''
 }
 
 onMounted(async () => {
-  // “Réveil” de session (pas d’erreur visible)
-  try {
-    await $fetch('/api/accounts/whoami', { method: 'GET', credentials: 'include' })
-  } catch {
-    /* noop */
+  await auth.fetchMe(true).catch(() => {})
+  if (auth.gate.value.ok) {
+    await navigateTo('/ask-agents')
+    return
   }
+  await ensureNonce()
+})
+
+onBeforeUnmount(() => {
+  clearRetryTimer()
 })
 </script>
 

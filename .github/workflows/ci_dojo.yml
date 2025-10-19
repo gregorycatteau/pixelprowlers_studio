@@ -1,0 +1,182 @@
+name: CI — Dojo Auth
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+concurrency:
+  group: ci-dojo-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend — pytest
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=20
+
+    env:
+      APP_ENV: test
+      DJANGO_SETTINGS_MODULE: studio_core.settings.test
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      REDIS_URL: redis://127.0.0.1:6379/0
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Cache Poetry / pip
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pypoetry
+            ~/.cache/pip
+          key: ${{ runner.os }}-poetry-${{ hashFiles('backend/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: poetry install --with dev,test --no-interaction --no-ansi
+
+      - name: Migrate database
+        working-directory: backend
+        run: poetry run python manage.py migrate --noinput
+
+      - name: Run pytest
+        working-directory: backend
+        run: |
+          mkdir -p reports
+          poetry run pytest --junitxml=reports/pytest.xml
+
+      - name: Upload pytest report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-pytest-report
+          path: backend/reports/pytest.xml
+          if-no-files-found: warn
+
+  frontend:
+    name: Frontend — Playwright
+    runs-on: ubuntu-latest
+    needs: backend
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=20
+
+    env:
+      APP_ENV: dev
+      DJANGO_SETTINGS_MODULE: studio_core.settings.dev
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      REDIS_URL: redis://127.0.0.1:6379/0
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Cache Poetry / pip
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pypoetry
+            ~/.cache/pip
+          key: ${{ runner.os }}-poetry-${{ hashFiles('backend/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+
+      - name: Install backend dependencies (for dev server)
+        working-directory: backend
+        run: poetry install --with dev,test --no-interaction --no-ansi
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps
+
+      - name: Run Playwright E2E
+        working-directory: frontend
+        env:
+          DEBUG: ""
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          if-no-files-found: warn

@@ -1,0 +1,9 @@
+> nuxt dev
+
+[nuxi 08:51:31] Nuxt 4.0.3 with Nitro 2.12.4
+[08:51:32]
+  ➜ Local:    http://localhost:3000/
+  ➜ Network:  use --host to expose
+
+
+[08:51:33]  ERROR  Cannot start nuxt:  EACCES: permission denied, rmdir '/home/striker/Documents/developpement_web/pixelprowlers_studio/frontend/.nuxt/dist/server'[201~
