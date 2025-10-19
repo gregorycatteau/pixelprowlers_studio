@@ -89,6 +89,7 @@ type VerifyResp = { ok: boolean; error?: string }
 
 const auth = useAuth()
 const nonce = useNonce()
+const fetcher = useRequestFetch()
 
 const step = ref<1 | 2>(1)
 const loading = ref(false)
@@ -173,7 +174,7 @@ const submitAbsurdity = async () => {
 
   try {
     const res = await requestWithNonce(() =>
-      $fetch<AbsurdityResp>('/api/gates/absurdity-check', {
+      fetcher<AbsurdityResp>('/api/gates/absurdity-check', {
         method: 'POST',
         body: { text: absurdText.value },
       }),
@@ -208,7 +209,7 @@ const initChallenge = async () => {
   await ensureNonce()
   try {
     const res = await requestWithNonce(() =>
-      $fetch<InitResp>('/api/gates/challenge-init', {
+      fetcher<InitResp>('/api/gates/challenge-init', {
         method: 'POST',
         body: { agent: 'Claire' },
       }),
@@ -228,7 +229,7 @@ const submitRitual = async () => {
 
   try {
     const res = await requestWithNonce(() =>
-      $fetch<VerifyResp>('/api/gates/challenge-verify', {
+      fetcher<VerifyResp>('/api/gates/challenge-verify', {
         method: 'POST',
         body: { agent: 'Claire', response: ritualText.value },
       }),

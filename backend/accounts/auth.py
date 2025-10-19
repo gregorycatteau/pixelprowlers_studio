@@ -20,6 +20,28 @@ from datetime import timedelta
 from django.conf import settings
 from django.middleware.csrf import get_token as get_csrf_token
 from django_ratelimit.decorators import ratelimit
+
+# S5 gatekeeper (adaptive gate)
+from eotp.gatekeeper import (
+    GATE_ENABLE,
+    GATE_RISK_THRESHOLD,
+    compute_risk,
+    issue_gate_challenge,
+    verify_gate_response,
+)
+
+# S4 throttling/backoff
+from eotp.limits import (
+    backoff_get_retry_after,
+    backoff_on_failure,
+    backoff_reset,
+    check_and_consume,
+    get_ip_prefix,
+)
+
+# S5 passphrase flags
+from eotp.passphrase import PASS_ENABLE, PASS_REQUIRED
+from eotp.services import eotp_issue, eotp_resend, eotp_verify
 from rest_framework import permissions, status
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework.response import Response
@@ -29,6 +51,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 from studio_core.metrics import record_auth_event
+from studio_core.metrics_backend import counter_inc
 
 logger = logging.getLogger(__name__)
 
@@ -938,9 +961,43 @@ def api_auth_login(request):
 
     fa_required = bool(getattr(user, "is_superuser", False))
     eotp_meta = None
-    if fa_required:
+
+    # S5 — Passphrase required enforcement at login
+    try:
+        pass_ok = bool(request.session.get("pass_ok", False))
+    except Exception:
+        pass_ok = False
+    if (
+        os.getenv("PASS_REQUIRED", "0").lower() in ("1", "true", "yes", "on") or PASS_REQUIRED
+    ) and not pass_ok:
         try:
-            eotp_meta = _eotp_issue(request, user)
+            request.session["pass_required"] = True
+            request.session.modified = True
+        except Exception:
+            pass
+        # 403 générique pour ne pas révéler la cause
+        return JsonResponse({"status": "error", "error": "invalid_credentials"}, status=403)
+
+    # S5 — Adaptive gate before issuing e-OTP
+    gate_required = False
+    try:
+        if GATE_ENABLE:
+            risk = float(compute_risk(request))
+            if risk > float(GATE_RISK_THRESHOLD):
+                gate_required = True
+                request.session["gate_required"] = True
+                request.session["gate_ok"] = False
+                request.session.modified = True
+                counter_inc("eotp_gate_required_total")
+    except Exception:
+        # Do not break login on gate computation errors
+        gate_required = False
+
+    if fa_required and not gate_required:
+        try:
+            # Utilise le service e-OTP basé DB (fallback cache conservé par _peek si APP_ENV=test)
+            res = eotp_issue(request, user)
+            eotp_meta = {"expires_in": res.expires_in} if getattr(res, "ok", False) else None
         except Exception:
             eotp_meta = None
 
@@ -952,6 +1009,8 @@ def api_auth_login(request):
     payload = {"status": "pending_2fa", "user_hint": user_hint}
     if fa_required:
         payload["fa_required"] = True
+        if gate_required:
+            payload["gate_required"] = True
         if eotp_meta and "expires_in" in eotp_meta:
             payload["eotp_expires_in"] = int(eotp_meta["expires_in"])
 
@@ -1082,25 +1141,61 @@ def api_auth_eotp_verify(request):
     """
     POST /api/auth/2fa/email/verify/
     Body: { "code": "123456" }
-    On success: login session + issue JWT & refresh cookie, clear pending 2FA.
-    Errors are uniform (anti-enum). Strict rate-limit with Retry-After.
+    Sur succès: login + JWT + clear pending_2fa. Réponses uniformes (anti-énum).
     """
-    # Basic CSRF is enforced via decorator; rate limit per session/user
     user_id = request.session.get("pending_2fa_user")
+
+    # S5 — Gate required check (deny until validated)
+    try:
+        gate_required = bool(request.session.get("gate_required", False))
+        gate_ok = bool(request.session.get("gate_ok", False))
+    except Exception:
+        gate_required, gate_ok = False, False
+    if (
+        gate_required
+        and not gate_ok
+        and (os.getenv("GATE_ENABLE", "1").lower() in ("1", "true", "yes", "on"))
+    ):
+        # Generic 403 while gate not validated
+        resp = JsonResponse({"ok": False, "error": "invalid_code"}, status=403)
+        return resp
+
+    # S5 — Passphrase required enforcement
+    try:
+        pass_ok = bool(request.session.get("pass_ok", False))
+    except Exception:
+        pass_ok = False
+    if (
+        os.getenv("PASS_REQUIRED", "0").lower() in ("1", "true", "yes", "on") or PASS_REQUIRED
+    ) and not pass_ok:
+        return JsonResponse({"ok": False, "error": "invalid_code"}, status=403)
+
+    # S4 — Backoff (soft tarpit) and Rate-limit (multi-scope)
+    if not request.session.session_key:
+        request.session.save()
+    session_key = str(request.session.session_key or "")
+    # Backoff gate (if in backoff, immediately 429 with Retry-After)
+    _retry = backoff_get_retry_after(session_key)
+    if _retry > 0:
+        counter_inc("eotp_backoff_applied_total")
+        resp = JsonResponse({"ok": False, "error": "rate_limited"}, status=429)
+        resp["Retry-After"] = str(int(_retry))
+        return resp
+
+    # Multi-grain ratelimit (IP + session + user)
+    ip_prefix = get_ip_prefix(request)
+    allowed, retry_after = check_and_consume(
+        "verify",
+        {"ip": ip_prefix, "session": session_key, "user": str(user_id or "")},
+    )
+    if not allowed:
+        counter_inc("eotp_verify_429_total")
+        resp = JsonResponse({"ok": False, "error": "rate_limited"}, status=429)
+        if retry_after:
+            resp["Retry-After"] = str(int(retry_after))
+        return resp
     if not user_id:
         return JsonResponse({"ok": False, "error": "invalid_code"}, status=401)
-
-    # Rate-limit verify attempts (per user+IP within TTL window)
-    if _rate_exceeded(
-        "eotp:verify", request, user_id, limit=_EOTP_VERIFY_MAX_ATTEMPTS, window_sec=_EOTP_TTL
-    ):
-        resp = JsonResponse({"ok": False, "error": "rate_limited"}, status=429)
-        # Provide Retry-After equal to remaining TTL
-        state = _eotp_state_get(request) or {}
-        remaining = max(0, int(state.get("exp", 0) - int(timezone.now().timestamp())))
-        resp["Retry-After"] = str(max(30, remaining or 30))
-        return resp
-    _rate_hit("eotp:verify", request, user_id, window_sec=_EOTP_TTL)
 
     try:
         data = json.loads(request.body.decode("utf-8")) if request.body else {}
@@ -1111,42 +1206,37 @@ def api_auth_eotp_verify(request):
     if not code or not _re.match(r"^\d{6}$", code):
         return JsonResponse({"ok": False, "error": "invalid_code"}, status=401)
 
-    state = _eotp_state_get(request)
-    now = int(timezone.now().timestamp())
-    if (
-        not state
-        or state.get("consumed")
-        or now > int(state.get("exp", 0))
-        or int(state.get("user_id") or 0) != int(user_id)
-    ):
+    # Délègue au service DB (constant-time, TTL, tries_count/locked)
+    res = eotp_verify(request, code)
+    if not getattr(res, "ok", False):
+        # locked/expired → on garde un message générique côté client (anti-énum)
+        err = getattr(res, "error", None)
+        if err == "rate_limited":
+            resp = JsonResponse({"ok": False, "error": "rate_limited"}, status=429)
+            if getattr(res, "retry_after", None):
+                resp["Retry-After"] = str(int(res.retry_after))
+            return resp
+        if err == "expired":
+            return JsonResponse({"ok": False, "error": "invalid_code"}, status=403)
+        # Backoff progressif côté verify pour toute autre erreur (générique)
+        delay = backoff_on_failure(session_key)
+        if delay > 0:
+            counter_inc("eotp_backoff_applied_total")
+            resp = JsonResponse({"ok": False, "error": "rate_limited"}, status=429)
+            resp["Retry-After"] = str(int(delay))
+            return resp
         return JsonResponse({"ok": False, "error": "invalid_code"}, status=401)
 
-    # Constant-time verify (argon2 if available else sha256+pepper)
-    ok = False
-    try:
-        ok = _eotp_verify_hash(str(state.get("hash") or ""), code)
-    except Exception:
-        ok = False
-
-    if not ok:
-        # bump attempts (best-effort)
-        try:
-            state["attempts"] = int(state.get("attempts", 0)) + 1
-            _eotp_state_set(request, state, ttl=max(1, int(state.get("exp", now) - now)))
-        except Exception:
-            pass
-        return JsonResponse({"ok": False, "error": "invalid_code"}, status=401)
-
-    # Success: consume and clear pending
-    try:
-        _eotp_state_del(request)
-    except Exception:
-        pass
-
+    # Succès → finalise
     try:
         user = User.objects.get(pk=user_id, is_active=True)
     except User.DoesNotExist:
         return JsonResponse({"ok": False, "error": "invalid_code"}, status=401)
+    # Reset backoff on success
+    try:
+        backoff_reset(session_key)
+    except Exception:
+        pass
 
     try:
         login(request, user)
@@ -1161,7 +1251,6 @@ def api_auth_eotp_verify(request):
         pass
 
     resp = _issue_jwt_response(request, user)
-    # Realm cookie for Dojo (admin/superuser)
     resp.set_cookie(
         "__Host-pp_realm",
         "A",
@@ -1170,7 +1259,6 @@ def api_auth_eotp_verify(request):
         samesite="Strict",
         path="/",
     )
-    # Metrics/logs
     record_auth_event(
         "eotp",
         "ok",
@@ -1195,77 +1283,150 @@ def api_auth_eotp_verify(request):
 def api_auth_eotp_resend(request):
     """
     POST /api/auth/2fa/email/resend/
-    Resend a new E-OTP with cooldown/quota. Returns 200 with a uniform body or 429 with Retry-After.
+    Renvoie un nouvel e-OTP (cooldown minimal S1). 200 ou 429 avec Retry-After.
     """
     user_id = request.session.get("pending_2fa_user")
     if not user_id:
         return JsonResponse({"ok": False, "error": "invalid_state"}, status=401)
 
-    state = _eotp_state_get(request)
-    now_ts = int(timezone.now().timestamp())
-    if (
-        not state
-        or now_ts > int(state.get("exp", 0))
-        or int(state.get("user_id") or 0) != int(user_id)
-    ):
-        # Regenerate a new code if absent/expired but keep same TTL baseline
-        try:
-            user = User.objects.get(pk=user_id, is_active=True)
-        except User.DoesNotExist:
-            return JsonResponse({"ok": False, "error": "invalid_state"}, status=401)
-        meta = _eotp_issue(request, user)
-        return JsonResponse(
-            {
-                "ok": True,
-                "retry_after": _EOTP_COOLDOWN,
-                "expires_in": int(meta.get("expires_in", _EOTP_TTL)),
-            },
-            status=200,
-        )
-
-    # Enforce cooldown & quota
-    resend_count = int(state.get("resend_count", 1))
-    last_sent = int(state.get("last_sent", 0))
-    delta = now_ts - last_sent
-    if resend_count >= _EOTP_MAX_RESENDS or delta < _EOTP_COOLDOWN:
-        retry_after = max(1, _EOTP_COOLDOWN - max(0, delta))
-        resp = JsonResponse({"ok": False, "error": "rate_limited"}, status=429)
-        resp["Retry-After"] = str(retry_after)
-        return resp
-
-    # Regenerate a fresh code (invalidate the previous by overwriting hash)
     try:
         user = User.objects.get(pk=user_id, is_active=True)
     except User.DoesNotExist:
         return JsonResponse({"ok": False, "error": "invalid_state"}, status=401)
 
-    code = f"{secrets.randbelow(1_000_000):06d}"
-    state["hash"] = _eotp_hash(code)
-    state["last_sent"] = now_ts
-    state["resend_count"] = resend_count + 1
-    _eotp_state_set(request, state, ttl=max(1, int(state.get("exp", now_ts) - now_ts)))
-
+    # S5 — Gate required enforcement for resend
     try:
-        subj = "Votre code de vérification — PixelProwlers Studio"
-        msg = f"Votre code: {code}\nValable {max(1, int((int(state.get('exp', now_ts)) - now_ts)/60))} minute(s). Ne le partagez pas."
-        send_mail(
-            subj,
-            msg,
-            getattr(settings, "DEFAULT_FROM_EMAIL", None),
-            ["contact@pixelprowlers.io"],
-            fail_silently=True,
-        )
+        gate_required = bool(request.session.get("gate_required", False))
+        gate_ok = bool(request.session.get("gate_ok", False))
+    except Exception:
+        gate_required, gate_ok = False, False
+    if (
+        gate_required
+        and not gate_ok
+        and (os.getenv("GATE_ENABLE", "1").lower() in ("1", "true", "yes", "on"))
+    ):
+        return JsonResponse({"ok": False, "error": "invalid_state"}, status=403)
+
+    # S5 — Passphrase required enforcement for resend
+    try:
+        pass_ok = bool(request.session.get("pass_ok", False))
+    except Exception:
+        pass_ok = False
+    if (
+        os.getenv("PASS_REQUIRED", "0").lower() in ("1", "true", "yes", "on") or PASS_REQUIRED
+    ) and not pass_ok:
+        return JsonResponse({"ok": False, "error": "invalid_state"}, status=403)
+
+    # S4 — Rate-limit resend (IP + session + user)
+    if not request.session.session_key:
+        request.session.save()
+    session_key = str(request.session.session_key or "")
+    ip_prefix = get_ip_prefix(request)
+    allowed, retry_after = check_and_consume(
+        "resend",
+        {"ip": ip_prefix, "session": session_key, "user": str(user_id)},
+    )
+    if not allowed:
+        counter_inc("eotp_resend_429_total")
+        resp = JsonResponse({"ok": False, "error": "rate_limited"}, status=429)
+        if retry_after:
+            resp["Retry-After"] = str(int(retry_after))
+        return resp
+
+    res = eotp_resend(request, user=user)
+    if not getattr(res, "ok", False):
+        resp = JsonResponse({"ok": False, "error": "rate_limited"}, status=429)
+        if getattr(res, "retry_after", None):
+            resp["Retry-After"] = str(int(res.retry_after))
+        return resp
+
+    payload = {
+        "ok": True,
+        "retry_after": int(getattr(res, "retry_after", 30)),
+        "expires_in": int(getattr(res, "expires_in", 300)),
+    }
+    resp = JsonResponse(payload, status=200)
+    # Fournit aussi Retry-After en en-tête (profil cooldown)
+    resp["Retry-After"] = str(payload["retry_after"])
+    return resp
+
+
+@require_POST
+@csrf_protect
+def api_auth_eotp_gate_issue(request):
+    """
+    POST /api/auth/2fa/gate/issue/
+    Émet un challenge Gate (arithmétique simple) si risk > threshold; sinon indique required=False.
+    Réponses:
+      200 { ok: true, required: false }   (pas de gate)
+      200 { ok: true, required: true, kind, prompt, ttl }
+    """
+    if not request.session.session_key:
+        request.session.save()
+    session_key = str(request.session.session_key or "")
+
+    # CSRF déjà protégé au niveau global (decorator sur endpoints d'auth)
+    try:
+        risk = float(compute_risk(request))
+    except Exception:
+        risk = 0.0
+
+    if not (os.getenv("GATE_ENABLE", "1").lower() in ("1", "true", "yes", "on")):
+        return JsonResponse({"ok": True, "required": False}, status=200)
+
+    if risk <= float(GATE_RISK_THRESHOLD):
+        return JsonResponse({"ok": True, "required": False}, status=200)
+
+    ch = issue_gate_challenge(session_key, risk)
+    try:
+        request.session["gate_required"] = True
+        request.session["gate_ok"] = False
+        request.session.modified = True
     except Exception:
         pass
-
-    remaining = max(0, int(state.get("exp", now_ts) - now_ts))
     return JsonResponse(
-        {"ok": True, "retry_after": _EOTP_COOLDOWN, "expires_in": remaining}, status=200
+        {"ok": True, "required": True, "kind": ch.kind, "prompt": ch.prompt, "ttl": int(ch.ttl)},
+        status=200,
     )
 
 
 @require_POST
-@csrf_exempt
+@csrf_protect
+def api_auth_eotp_gate_verify(request):
+    """
+    POST /api/auth/2fa/gate/verify/
+    Body: { "response": string }
+    Vérifie le challenge Gate courant. Sur succès, met gate_ok=True en session.
+    Réponses:
+      200 { ok: true }    (succès)
+      400/403 génériques sinon
+    """
+    try:
+        data = json.loads(request.body.decode("utf-8")) if request.body else {}
+    except Exception:
+        return JsonResponse({"ok": False, "error": "bad_json"}, status=400)
+
+    if not request.session.session_key:
+        request.session.save()
+    session_key = str(request.session.session_key or "")
+    resp = (data.get("response") or "").strip()
+
+    if not (os.getenv("GATE_ENABLE", "1").lower() in ("1", "true", "yes", "on")):
+        return JsonResponse({"ok": False, "error": "not_allowed"}, status=403)
+
+    ok = verify_gate_response(session_key, resp)
+    if not ok:
+        return JsonResponse({"ok": False, "error": "invalid"}, status=403)
+
+    try:
+        request.session["gate_ok"] = True
+        request.session.modified = True
+        counter_inc("eotp_gate_passed_total")
+    except Exception:
+        pass
+    return JsonResponse({"ok": True}, status=200)
+
+
 def api_auth_eotp_peek(request):
     """
     POST /api/auth/2fa/email/_peek/  (TEST ONLY)
@@ -1282,7 +1443,9 @@ def api_auth_eotp_peek(request):
         return JsonResponse({"ok": False, "error": "invalid_state"}, status=400)
 
     state = _eotp_state_get(request) or {}
-    code = state.get("peek_code")
+    code = (state.get("peek_code") if isinstance(state, dict) else None) or request.session.get(
+        "eotp_peek_code"
+    )
     if not code:
         return JsonResponse({"ok": False, "error": "unavailable"}, status=404)
 

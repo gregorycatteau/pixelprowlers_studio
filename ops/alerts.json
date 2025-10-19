@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "notes": "Adapter-first alert definitions for e-OTP. Human-readable, Prom-ready later. Time windows are sliding.",
+  "rules": [
+    {
+      "id": "eotp_success_rate_low",
+      "severity": "CRIT",
+      "window": "5m",
+      "description": "Success rate (issue -> ok) below 70% over last 5 minutes",
+      "metric": {
+        "ok": "eotp_ok_total",
+        "issue": "eotp_issue_total"
+      },
+      "expression": "rate(ok)/max(rate(issue),1) < 0.70",
+      "hints": [
+        "Check mail transport (S2), queue latency, DB contention",
+        "Inspect /debug/eotp-stats histograms for eotp_issue_to_ok_seconds spikes",
+        "Review incident pipeline (runbook-process.md)"
+      ]
+    },
+    {
+      "id": "eotp_locked_rate_high",
+      "severity": "CRIT",
+      "window": "15m",
+      "description": "Locked rate above 10% over last 15 minutes",
+      "metric": {
+        "locked": "eotp_locked_total",
+        "attempts": "eotp_failed_total"
+      },
+      "expression": "rate(locked)/max(rate(locked)+rate(attempts),1) > 0.10",
+      "hints": [
+        "Possible brute-force. Verify throttling/backoff effectiveness (S4)",
+        "Consider raising MAX_TRIES or adjusting cooldown carefully",
+        "Audit IP/ASN distribution"
+      ]
+    },
+    {
+      "id": "eotp_resend_429_rate_warn",
+      "severity": "WARN",
+      "window": "10m",
+      "description": "Resend 429 rate above 20% over last 10 minutes",
+      "metric": {
+        "resend_429": "eotp_resend_429_total",
+        "resend_total_proxy": "eotp_issue_total"
+      },
+      "expression": "rate(resend_429)/max(rate(resend_total_proxy),1) > 0.20",
+      "hints": [
+        "Users may be spamming resend; verify UX hints and cooldown profile",
+        "Watch for abnormal per-IP/session patterns"
+      ]
+    },
+    {
+      "id": "mailer_hard_bounce_high",
+      "severity": "CRIT",
+      "window": "1h",
+      "description": "Hard bounce rate > 3% per hour (hooked in S2 Postmark)",
+      "metric": {
+        "hard_bounce": "mail_hard_bounce_total",
+        "delivered": "mail_delivered_total"
+      },
+      "expression": "rate(hard_bounce)/max(rate(delivered),1) > 0.03",
+      "hints": [
+        "Check sender reputation, blocklists, and bounce handling",
+        "Inspect Postmark dashboard and webhooks",
+        "Freeze E-OTP for affected domains if necessary"
+      ]
+    }
+  ]
+}

@@ -18,4 +18,9 @@ class SecurityHeadersMiddleware(MiddlewareMixin):
         )
         response.setdefault("Cross-Origin-Opener-Policy", "same-origin")
         response.setdefault("Cross-Origin-Embedder-Policy", "same-origin")
+        # S7: Ajouter CSP minimal + HSTS si absents (tests et environnements sans proxy terminant TLS)
+        response.setdefault(
+            "Content-Security-Policy", "default-src 'self'; base-uri 'self'; frame-ancestors 'none'"
+        )
+        response.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         return response

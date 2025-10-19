@@ -17,6 +17,7 @@ test.describe('Availability', () => {
     // Optionally assert main form fields exist
     await expect(page.locator('#username')).toBeVisible()
     await expect(page.locator('#password')).toBeVisible()
-    await expect(page.locator('button.btn-primary')).toBeEnabled()
+    // Button is disabled until credentials are provided; visibility is enough for availability
+    await expect(page.locator('button.btn-primary')).toBeVisible()
   })
 })

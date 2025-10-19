@@ -12,12 +12,15 @@ Notes:
 from __future__ import annotations
 
 from django.urls import path
+from eotp.passphrase_views import api_auth_eotp_passphrase_set, api_auth_eotp_passphrase_verify
 
 from .auth import (
     LoginCookieView,
     LogoutCookieView,
     RefreshCookieView,
     WhoAmIView,
+    api_auth_eotp_gate_issue,
+    api_auth_eotp_gate_verify,
     api_auth_eotp_peek,
     api_auth_eotp_resend,
     api_auth_eotp_verify,
@@ -50,6 +53,14 @@ urlpatterns = [
     path("auth/2fa/email/verify/", api_auth_eotp_verify, name="auth_eotp_verify"),
     path("auth/2fa/email/resend/", api_auth_eotp_resend, name="auth_eotp_resend"),
     path("auth/2fa/email/_peek/", api_auth_eotp_peek, name="auth_eotp_peek"),
+    path("auth/2fa/gate/issue/", api_auth_eotp_gate_issue, name="auth_eotp_gate_issue"),
+    path("auth/2fa/gate/verify/", api_auth_eotp_gate_verify, name="auth_eotp_gate_verify"),
+    path("auth/2fa/passphrase/set/", api_auth_eotp_passphrase_set, name="auth_eotp_passphrase_set"),
+    path(
+        "auth/2fa/passphrase/verify/",
+        api_auth_eotp_passphrase_verify,
+        name="auth_eotp_passphrase_verify",
+    ),
     path(
         "auth/totp/recovery/export/",
         api_auth_totp_recovery_export,

@@ -40,7 +40,8 @@ export default defineEventHandler(async (event: H3Event) => {
   // FR: mode "double-submit strict" — on privilégie la valeur du cookie csrftoken
   const cookieCsrf = extractCsrfFromCookie(incomingCookies) || ''
   const headerCsrf = (reqHeaders['x-csrftoken'] as string | undefined) || ''
-  const effectiveCsrf = sanitizeCsrf(cookieCsrf || headerCsrf || '')
+  // Prefer explicit header (sent by client from latest cookie) then fallback to cookie
+  const effectiveCsrf = sanitizeCsrf(headerCsrf || cookieCsrf || '')
 
   // Lit le corps JSON (identifiant/mot de passe)
   const body = (await readBody<Record<string, unknown>>(event).catch(() => ({}))) || {}

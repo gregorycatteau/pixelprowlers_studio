@@ -6,9 +6,9 @@
         <p class="subtitle">Saisissez le code reçu par email</p>
       </header>
 
-      <div class="info">
-        <p v-if="ttlLeft > 0">Code valable encore {{ ttlLeft }} s</p>
-        <p v-else>Le code a expiré. Renvoyez un nouveau code.</p>
+      <div class="info" aria-live="polite">
+        <p id="ttl" v-if="ttlDisplay > 0">Code valable encore {{ ttlDisplay }} s</p>
+        <p id="ttl" v-else>Le code a expiré. Renvoyez un nouveau code.</p>
       </div>
 
       <form class="form" @submit.prevent="onVerify">
@@ -16,6 +16,7 @@
           <label class="label" for="code">Code à 6 chiffres</label>
           <input
             id="code"
+            data-testid="code"
             v-model="code"
             class="input"
             type="text"
@@ -28,20 +29,46 @@
         </div>
 
         <div class="actions">
-          <button class="btn-primary" type="submit" :disabled="verifyDisabled">
-            <span v-if="verifyAfter <= 0 && !verifying">Valider</span>
-            <span v-else-if="verifying">Vérification…</span>
-            <span v-else>Réessayer dans {{ verifyAfter }} s</span>
+          <button
+            id="btn-verify"
+            data-testid="btn-verify"
+            class="btn-primary"
+            type="submit"
+            :disabled="verifyDisabled"
+            @click="onVerifyClickBreadcrumb"
+          >
+            <span v-if="store.retryAfterVerify <= 0 && store.status !== 'verifying'">Valider</span>
+            <span v-else-if="store.status === 'verifying'">Vérification…</span>
+            <span v-else>Réessayer dans {{ store.retryAfterVerify }} s</span>
           </button>
 
-          <button class="btn-secondary" type="button" :disabled="resendDisabled" @click="onResend">
-            <span v-if="resendAfter <= 0 && !resending">Renvoyer</span>
-            <span v-else-if="resending">Envoi…</span>
-            <span v-else>Renvoyer dans {{ resendAfter }} s</span>
+          <button
+            id="btn-resend"
+            data-testid="btn-resend"
+            class="btn-secondary"
+            type="button"
+            :disabled="resendDisabled"
+            @click="onResend"
+          >
+            <span v-if="store.retryAfterResend <= 0">Renvoyer</span>
+            <span v-else>Renvoyer dans {{ store.retryAfterResend }} s</span>
+          </button>
+
+          <!-- Dev/test only: helper _peek -->
+          <button
+            v-if="showPeek"
+            class="btn-secondary"
+            type="button"
+            title="_peek (test only)"
+            @click="onPeek"
+          >
+            _peek
           </button>
         </div>
 
-        <p v-if="errorMsg" class="error">{{ errorMsg }}</p>
+        <p id="msg" data-testid="msg" v-if="uiMessage" class="error" aria-live="polite">
+          {{ uiMessage }}
+        </p>
       </form>
 
       <footer class="foot">
@@ -54,26 +81,21 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, reactive, ref, computed } from 'vue'
-import { navigateTo } from '#app'
-import type { FetchError } from 'ofetch'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { useRuntimeConfig, navigateTo } from '#imports'
+import { useEotpStore } from '../../stores/useEotpStore'
 
-const auth = useAuth()
-const csrf = useCsrf()
+const cfg = useRuntimeConfig()
+const showPeek = computed(() => {
+  const env = String(cfg.public?.appEnv || '').toLowerCase()
+  return env === 'test'
+})
+
+const store = useEotpStore()
 
 const code = ref('')
-const verifying = ref(false)
-const resending = ref(false)
-const errorMsg = ref('')
-
-const verifyAfter = ref(0) // cooldown après 429 verify
-const resendAfter = ref(0) // cooldown après resend
-
-const expiresAt = ref<number | null>(null)
-const ttlLeft = ref(0)
-let ttlTimer: ReturnType<typeof setInterval> | null = null
-let verifyTimer: ReturnType<typeof setInterval> | null = null
-let resendTimer: ReturnType<typeof setInterval> | null = null
+const tick = ref(0) // tick réactif pour rafraîchir l’affichage TTL
+let intervalId: ReturnType<typeof setInterval> | null = null
 
 const toast = reactive({
   visible: false,
@@ -88,169 +110,112 @@ const openToast = (message: string, variant: 'info' | 'success' | 'warning' | 'd
 }
 
 const onCodeInput = () => {
-  // Conserver uniquement les chiffres, max 6
+  // Conserver uniquement les chiffres, max 6 (backend fait foi)
   code.value = (code.value || '').replace(/\D+/g, '').slice(0, 6)
 }
 
+const ttlDisplay = computed(() => {
+  // Forcer recompute avec tick (Date.now() n’est pas réactif)
+  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+  tick.value
+  return store.ttlLeftSec
+})
+
 const verifyDisabled = computed(() => {
-  if (verifying.value) return true
-  if (verifyAfter.value > 0) return true
+  if (store.status === 'verifying') return true
+  if (store.retryAfterVerify > 0) return true
   return code.value.length !== 6
 })
 
 const resendDisabled = computed(() => {
-  return resending.value || resendAfter.value > 0
+  return store.retryAfterResend > 0
 })
 
-const tickTtl = () => {
-  if (!expiresAt.value) {
-    ttlLeft.value = 0
-    return
+const uiMessage = computed(() => {
+  // Messages génériques: invalid/expired → identiques
+  if (store.status === 'invalid' || store.status === 'expired') {
+    return 'Code invalide. Veuillez réessayer.'
   }
-  const ms = expiresAt.value - Date.now()
-  ttlLeft.value = Math.max(0, Math.floor(ms / 1000))
+  if (store.status === 'locked') {
+    return 'Trop de tentatives. Réessayez plus tard.'
+  }
+  if (store.status === 'rate_limited') {
+    return 'Trop de demandes. Patientez avant de réessayer.'
+  }
+  if (store.status === 'error') {
+    return 'Service indisponible. Réessayez.'
+  }
+  return ''
+})
+
+const onVerifyClickBreadcrumb = () => {
+  try {
+    // Breadcrumb non sensible si infra dispo (sentry/otel)
+    // @ts-expect-error optional
+    window?.__pxp_breadcrumb?.('eotp:verify_click')
+  } catch {}
 }
-
-const startTimer = (kind: 'ttl' | 'verify' | 'resend') => {
-  if (kind === 'ttl') {
-    if (ttlTimer) clearInterval(ttlTimer)
-    ttlTimer = setInterval(tickTtl, 1000)
-  } else if (kind === 'verify') {
-    if (verifyTimer) clearInterval(verifyTimer)
-    verifyTimer = setInterval(() => {
-      verifyAfter.value -= 1
-      if (verifyAfter.value <= 0) {
-        clearInterval(verifyTimer!)
-        verifyTimer = null
-      }
-    }, 1000)
-  } else {
-    if (resendTimer) clearInterval(resendTimer)
-    resendTimer = setInterval(() => {
-      resendAfter.value -= 1
-      if (resendAfter.value <= 0) {
-        clearInterval(resendTimer!)
-        resendTimer = null
-      }
-    }, 1000)
-  }
-}
-
-onMounted(() => {
-  // Hydrate expiration depuis sessionStorage (déposé au login)
-  const raw = (sessionStorage.getItem('eotp_expires_at') || '').trim()
-  const ts = Number(raw)
-  if (Number.isFinite(ts) && ts > Date.now()) {
-    expiresAt.value = ts
-  } else {
-    // fallback TTL 5 min
-    expiresAt.value = Date.now() + 300_000
-  }
-  tickTtl()
-  startTimer('ttl')
-})
-
-onBeforeUnmount(() => {
-  if (ttlTimer) clearInterval(ttlTimer)
-  if (verifyTimer) clearInterval(verifyTimer)
-  if (resendTimer) clearInterval(resendTimer)
-})
 
 const onVerify = async () => {
   if (verifyDisabled.value) return
-  verifying.value = true
-  errorMsg.value = ''
-
-  try {
-    await csrf.refresh()
-  } catch {}
-
-  try {
-    const res = await $fetch('/api/auth/2fa/email/verify', {
-      method: 'POST',
-      body: { code: code.value },
-      credentials: 'include',
-      headers: {
-        'X-CSRFToken': csrf.token,
-      },
-    })
-
-    // Succès → hydrater l'état, rediriger vers /gate
+  const result = await store.verify(code.value)
+  if (result.ok) {
     openToast('2FA validée.', 'success')
-    await auth.fetchMe(true).catch(() => {})
-    await navigateTo('/gate')
-  } catch (err) {
-    const error = err as FetchError<Record<string, unknown>>
-    const status = error?.response?.status
-    if (status === 429) {
-      // Respecter Retry-After pour l’utilisateur
-      const ra = error.response?.headers?.get?.('Retry-After')
-      const sec = ra ? Number(ra) : 30
-      verifyAfter.value = Number.isFinite(sec) ? Math.max(1, Math.round(sec)) : 30
-      startTimer('verify')
-      errorMsg.value = 'Trop de tentatives. Patientez avant de réessayer.'
-    } else if (status === 401 || status === 422) {
-      errorMsg.value = 'Code invalide.'
-    } else {
-      errorMsg.value = 'Service indisponible. Réessayez.'
+    try {
+      // L’auth actualisée peut être gérée via composable/auth existant; on redirige ensuite
+      await navigateTo('/gate')
+    } catch {
+      await navigateTo('/gate')
     }
-  } finally {
-    verifying.value = false
+  } else {
+    try {
+      // Breadcrumb non sensible
+      // @ts-expect-error optional
+      window?.__pxp_breadcrumb?.('eotp:error_displayed')
+    } catch {}
   }
 }
 
 const onResend = async () => {
-  if (resendDisabled.value) return
-  resending.value = true
-  errorMsg.value = ''
-
   try {
-    await csrf.refresh()
+    // Breadcrumb non sensible
+    // @ts-expect-error optional
+    window?.__pxp_breadcrumb?.('eotp:resend_click')
   } catch {}
 
-  try {
-    const res = (await $fetch('/api/auth/2fa/email/resend', {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'X-CSRFToken': csrf.token,
-      },
-    })) as any
-
-    // Mettre à jour le cooldown & TTL si fournis
-    const ra = Number(res?.retry_after) || 90
-    resendAfter.value = Math.max(1, Math.round(ra))
-    startTimer('resend')
-
-    const expIn = Number(res?.expires_in) || 300
-    const nextTs = Date.now() + expIn * 1000
-    sessionStorage.setItem('eotp_expires_at', String(nextTs))
-    expiresAt.value = nextTs
-    tickTtl()
-
+  const r = await store.resend()
+  if (r.ok) {
     openToast('Code renvoyé.', 'info')
-  } catch (err) {
-    const error = err as FetchError<Record<string, unknown>>
-    const status = error?.response?.status
-    if (status === 429) {
-      const ra =
-        error.response?.headers?.get?.('Retry-After') ||
-        (error as any)?.response?.headers?.['retry-after']
-      const sec = ra ? Number(ra) : 60
-      resendAfter.value = Number.isFinite(sec) ? Math.max(1, Math.round(sec)) : 60
-      startTimer('resend')
-      errorMsg.value = 'Trop de demandes. Patientez avant de réessayer.'
-    } else {
-      errorMsg.value = 'Envoi indisponible. Réessayez.'
-    }
-  } finally {
-    resending.value = false
+    code.value = ''
+  } else {
+    // Message géré via uiMessage selon status
+  }
+}
+
+const onPeek = async () => {
+  if (!showPeek.value) return
+  const r = await store.fetchPeek()
+  if (r.ok && r.code) {
+    code.value = r.code
   }
 }
 
 const goBack = async () => {
   await navigateTo('/login')
 }
+
+onMounted(() => {
+  store.hydrateExpiresFromSession(300)
+  if (intervalId) clearInterval(intervalId)
+  intervalId = setInterval(() => {
+    store.decrementCooldownsTick()
+    tick.value += 1
+  }, 1000)
+})
+
+onBeforeUnmount(() => {
+  if (intervalId) clearInterval(intervalId)
+})
 </script>
 
 <style scoped>

@@ -14,6 +14,7 @@ from django.views.generic import RedirectView
 
 # OpenAPI schema views (drf-spectacular)
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+from eotp import views as eotp_views
 from laby import views as laby_views
 
 # JWT (DRF SimpleJWT) — compat héritée
@@ -79,6 +80,9 @@ urlpatterns = [
         ),
         name="metrics",
     ),
+    # Debug e-OTP stats (DEV/TEST only; gated in view)
+    path("debug/eotp-stats", views.debug_eotp_stats, name="debug_eotp_stats"),
+    path("debug/eotp-stats/", views.debug_eotp_stats, name="debug_eotp_stats_slash"),
     # =========================
     # OpenAPI schema & docs (drf-spectacular)
     # =========================
@@ -106,6 +110,10 @@ urlpatterns = [
     path("api/accounts/", include("accounts.urls")),
     # Alias to expose /api/auth/* directly (frontend expects these)
     path("api/", include("accounts.urls")),
+    # Webhooks (S2): Postmark bounces
+    path(
+        "api/webhooks/postmark/bounce/", eotp_views.webhook_postmark_bounce, name="postmark_bounce"
+    ),
     # =========================
     # API Agents (consommée par Nuxt)
     # =========================
@@ -114,7 +122,7 @@ urlpatterns = [
     # =========================
     # MCP serveur (consommé par les clients MCP)
     # =========================
-    path("", include("mcp_server.urls")),
+    # path("mcp/", include("mcp_server.urls")),
 ]
 
 # Debug toolbar + médias en dev

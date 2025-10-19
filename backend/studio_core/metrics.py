@@ -45,6 +45,13 @@ __all__ = [
     "Gauge",
     "Histogram",
 ]
+# S6: journal (canonical JSON + hash chain)
+try:
+    from studio_core.obs.journal import append_event  # type: ignore
+except Exception:  # pragma: no cover
+
+    def append_event(*args, **kwargs):
+        return ""
 
 
 def _escape_label_value(value: str) -> str:
@@ -357,19 +364,35 @@ def record_auth_event(
     realm: Optional[str] = None,
     risk_score: Optional[float] = None,
     fa_required: Optional[bool] = None,
+    pass_required: Optional[bool] = None,
+    pass_ok: Optional[bool] = None,
+    gate_required: Optional[bool] = None,
+    gate_ok: Optional[bool] = None,
+    **extras: Any,  # S6: PII-safe only
 ) -> None:
     """
     Journalisation minimaliste côté métriques:
     - endpoint: "login" | "totp" | "webauthn" | ...
     - decision: "ok" | "fail" | "redirect_laby" | ...
     - realm: "clients" | "dojo" | "laby"
-    - risk_score: optionnel (float)
+    - risk_score: optionnel (float) — borné [0,1], arrondi 2 déc.
     - fa_required: optionnel (bool)
+    - pass_required/pass_ok/gate_required/gate_ok: optionnels (bool)
 
     Incrémente les compteurs génériques correspondants.
     """
     # Compteurs globaux
     metrics = ensure_default_metrics()
+
+    # S6: clamp/round risk_score for PII-safe logging
+    rs_norm: Optional[float] = None
+    if risk_score is not None:
+        try:
+            rs = float(risk_score)
+            rs = 0.0 if rs < 0 else (1.0 if rs > 1.0 else rs)
+            rs_norm = round(rs, 2)
+        except Exception:
+            rs_norm = None
 
     # Dériver et incrémenter selon endpoint/décision
     if endpoint == "login":
@@ -402,6 +425,31 @@ def record_auth_event(
             label_names=("realm", "endpoint", "decision"),
         )
         m.inc({"realm": realm, "endpoint": endpoint, "decision": decision})
+
+    # S6: append to immutable journal (adapter-first; PII-safe)
+    try:
+        payload = {
+            "source": "auth",
+            "endpoint": endpoint,
+            "decision": decision,
+            "realm": realm,
+            "risk_score": rs_norm,
+            "fa_required": bool(fa_required) if fa_required is not None else None,
+            "pass_required": bool(pass_required) if pass_required is not None else None,
+            "pass_ok": bool(pass_ok) if pass_ok is not None else None,
+            "gate_required": bool(gate_required) if gate_required is not None else None,
+            "gate_ok": bool(gate_ok) if gate_ok is not None else None,
+        }
+        # Merge extras while filtering to simple JSON scalars
+        for k, v in (extras or {}).items():
+            if isinstance(v, (str, int, float, bool)) or v is None:
+                payload[k] = v
+            else:
+                payload[k] = str(v)
+        append_event(payload)
+    except Exception:
+        # journaling must never break the app path
+        pass
 
 
 # ------------------------------------------------------------

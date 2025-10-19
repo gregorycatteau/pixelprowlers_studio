@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Django settings for studio_core project.
 Base agnostique d'environnement avec chargement .env et fallback sûrs.
@@ -112,10 +113,10 @@ INSTALLED_APPS = [
     "ai_assistants.apps.AiAssistantsConfig",  # ← AJOUT
     "overall_context",  # ← (optionnel) si tu l’emploies
     "api",
-    # mcp server
-    "mcp_server",
+    "eotp.apps.EotpConfig",
+    # NOTE: ne pas ajouter "mcp_server" ici si tu utilises l'option ASGI django-mcp.
+    # Le serveur MCP est monté dans ASGI (studio_core/asgi.py) et ne nécessite PAS d'app Django.
 ]
-
 
 # CORS (si présent)
 try:
@@ -161,9 +162,13 @@ REST_FRAMEWORK = {
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
+
 # ──────────────────────────────────────────────────────────────────────────────
-# MCP Server (django-mcp-server)
+# MCP Server (section héritée)
 # ──────────────────────────────────────────────────────────────────────────────
+# NOTE :
+# - Si tu utilises l’option ASGI via 'django-mcp' (recommandée), ces variables ne sont pas requises.
+# - On les laisse en place si tu souhaites expérimenter 'django-mcp-server' plus tard.
 DJANGO_MCP_ENDPOINT = os.getenv("DJANGO_MCP_ENDPOINT", "mcp")
 DJANGO_MCP_GLOBAL_SERVER_CONFIG = {
     "name": os.getenv("DJANGO_MCP_NAME", "pxp-mcp"),
@@ -171,13 +176,31 @@ DJANGO_MCP_GLOBAL_SERVER_CONFIG = {
 DJANGO_MCP_OUTPUT_RENDERER_CLASSES = [
     "rest_framework.renderers.JSONRenderer",
 ]
-# Si DJANGO_MCP_AUTHENTICATION_CLASSES n'est pas défini dans l'env,
-# on sécurise par défaut avec Session + JWT.
 DJANGO_MCP_AUTHENTICATION_CLASSES = _env_list("DJANGO_MCP_AUTHENTICATION_CLASSES", []) or [
     "rest_framework.authentication.SessionAuthentication",
     "rest_framework_simplejwt.authentication.JWTAuthentication",
 ]
 DJANGO_MCP_GET_SERVER_INSTRUCTIONS_TOOL = env_bool("DJANGO_MCP_GET_SERVER_INSTRUCTIONS_TOOL", True)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# MCP (Option A — ASGI via django-mcp)
+# Ces variables sont requises par django_mcp.mount_mcp_server même si 'django_mcp'
+# n'est PAS ajouté à INSTALLED_APPS.
+# ──────────────────────────────────────────────────────────────────────────────
+MCP_SERVER_TITLE = os.getenv("MCP_SERVER_TITLE", "django-pixelprowlers")
+MCP_SERVER_INSTRUCTIONS = os.getenv(
+    "MCP_SERVER_INSTRUCTIONS", "Provides MCP tools for PixelProwlers Studio"
+)
+MCP_SERVER_VERSION = os.getenv("MCP_SERVER_VERSION", "0.1.0")
+MCP_DIRS: List[str] = _env_list("MCP_DIRS", default=[])
+
+# Journalisation et sécurité (valeurs par défaut si 'django_mcp' n'est pas dans INSTALLED_APPS)
+MCP_LOG_LEVEL = os.getenv("MCP_LOG_LEVEL", "INFO")
+MCP_LOG_TOOL_REGISTRATION = env_bool("MCP_LOG_TOOL_REGISTRATION", True)
+MCP_LOG_TOOL_DESCRIPTIONS = env_bool("MCP_LOG_TOOL_DESCRIPTIONS", False)
+MCP_LOG_HTTP_HEADERS_ON_SSE_CONNECT = env_bool("MCP_LOG_HTTP_HEADERS_ON_SSE_CONNECT", False)
+# Clé utilisée par django_mcp pour signer/chiffrer si nécessaire; fallback sur SECRET_KEY
+MCP_SECRET_KEY = os.getenv("MCP_SECRET_KEY", SECRET_KEY)
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -215,6 +238,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "studio_core.wsgi.application"
+ASGI_APPLICATION = "studio_core.asgi.application"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # DB (DATABASE_URL → dict) avec fallback SQLite sécurisé

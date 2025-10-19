@@ -1,7 +1,7 @@
 version: "3.9"
 services:
   playwright:
-    image: mcr.microsoft/playwright:v1.56.0-jammy
+    image: mcr.microsoft.com/playwright:v1.56.0-jammy
     container_name: pxp_playwright
     working_dir: /workspace
     user: "1000:1000"
@@ -11,15 +11,20 @@ services:
       - PPW_BACKEND_HEALTH_URL=${PPW_BACKEND_HEALTH_URL:-http://127.0.0.1:8100/ready/}
       - PW_SKIP_WEBSERVER=${PW_SKIP_WEBSERVER:-1}
       - NODE_ENV=development
+      - E2E_USER=${E2E_USER:-}
+      - E2E_PASS=${E2E_PASS:-}
     volumes:
       - ./:/workspace:rw
       # Keep browsers cache between runs for speed (optional)
       - playwright-cache:/ms-playwright
     # Prefer host network to access host services on Linux (Kali)
     network_mode: host
+    # Ensure host.docker.internal resolves on Linux
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     # Run tests from frontend folder and keep reports in repo
     entrypoint: /bin/bash
-    command: -lc "cd frontend && npm ci && npx playwright install --with-deps && npx playwright test"
+    command: -lc "cd frontend && npx playwright test"
 
 volumes:
   playwright-cache: {}

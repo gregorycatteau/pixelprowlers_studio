@@ -10,9 +10,26 @@ import requests
 from django.conf import settings
 from django.db import connection
 from django.http import JsonResponse
+from django.views.decorators.http import require_GET
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+
+# S9: runtime telemetry imports (best-effort fallbacks)
+try:
+    from studio_core.telemetry.runtime import get_latest_risk_score  # type: ignore
+except Exception:  # pragma: no cover
+
+    def get_latest_risk_score(*args, **kwargs):
+        return None
+
+
+try:
+    from eotp.gatekeeper import get_adaptive_gate_threshold  # type: ignore
+except Exception:  # pragma: no cover
+
+    def get_adaptive_gate_threshold():
+        return None
 
 
 def health(request):
@@ -371,3 +388,50 @@ def jwks_json(request):
             pass
 
     return JsonResponse({"keys": keys}, status=200)
+
+
+@require_GET
+def debug_eotp_stats(request):
+    """
+    GET /debug/eotp-stats (DEV/TEST uniquement)
+    Retourne un snapshot JSON des compteurs internes (metrics_adapter).
+    - Jamais activé en prod (gate via APP_ENV).
+    Réponse:
+      200: { ok: true, stats: { ts, counters:{...}, histograms:{...} } }
+      404: { ok: false, error: "not_allowed" } si environnement non autorisé
+      501: { ok: false, error: "adapter_unavailable" } si adapter manquant
+    """
+    import os as _os
+
+    from django.conf import settings
+
+    env = getattr(settings, "APP_ENV", None) or _os.getenv("APP_ENV", "dev")
+    if str(env).lower() not in ("dev", "test"):
+        return JsonResponse({"ok": False, "error": "not_allowed"}, status=404)
+
+    try:
+        from .metrics_backend import get_snapshot
+    except Exception:
+        return JsonResponse({"ok": False, "error": "adapter_unavailable"}, status=501)
+
+    snap = get_snapshot()
+
+    # S9: expose runtime intelligence (DEV/TEST only)
+    try:
+        ros = get_latest_risk_score()
+    except Exception:
+        ros = None
+    try:
+        agt = get_adaptive_gate_threshold()
+    except Exception:
+        agt = None
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "stats": snap,
+            "risk_operational_score": ros,
+            "adaptive_gate_threshold": agt,
+        },
+        status=200,
+    )
